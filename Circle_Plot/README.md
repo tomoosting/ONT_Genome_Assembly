@@ -1,5 +1,6 @@
 # custom script to run run circle plot
 ## !This is mearly an adaptation to an already existing analyses!
+[![DOI](https://zenodo.org/badge/20772/rjchallis/assembly-stats.svg)](https://zenodo.org/badge/latestdoi/20772/rjchallis/assembly-stats)
 Please cite both [original source](https://assembly-stats.readme.io/docs) and this repo when using this.
 
 The shell script provided allows you to easily run the analyses.
