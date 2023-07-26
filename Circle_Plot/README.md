@@ -1,6 +1,6 @@
 # custom script to run run circle plot
 ## !This is mearly an adaptation to an already existing analyses!
-PLease cite both [original source](https://assembly-stats.readme.io/docs) and this repo when using this.
+Please cite both [original source](https://assembly-stats.readme.io/docs) and this repo when using this.
 
 The shell script provided allows you to easily run the analyses.
 Copy the entire Assembly-Stats_template folder and circle_plot.sh script

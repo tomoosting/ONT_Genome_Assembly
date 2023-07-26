@@ -1,0 +1,183 @@
+<html>
+
+<head>
+  <meta charset="UTF-8" />
+  <title>FOG Assembly Stats</title>
+</head>
+
+<body>
+  <link rel="stylesheet" type="text/css" href="css/circle-plot.css">
+  <link rel="stylesheet" type="text/css" href="css/square-plot.css">
+  <link rel="stylesheet" type="text/css" href="css/table.css">
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.2/jquery.min.js"></script>
+  <script src="https://d3js.org/d3.v3.min.js" charset="utf-8"></script>
+  <script src="http://labratrevenge.com/d3-tip/javascripts/d3.tip.v0.6.3.js"></script>
+  <script type="text/javascript" src="js/circle-plot.js"></script>
+  <script type="text/javascript" src="js/square-plot.js"></script>
+  <script type="text/javascript" src="js/table.js"></script>
+  <script>
+    localStorage.clear();
+  </script>
+  <!--add_jsons_here-->
+  <script type="text/javascript" src="json/kingfish.json"></script>
+  <style>
+    html,
+    body {
+      padding: 0px;
+      margin: 0px;
+      /*overflow: auto;*/
+    }
+
+    #assembly {
+      text-align: center;
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      right: 0;
+      font-family: helvetica, arial, sans-serif;
+      font-size: 14pt;
+      overflow: hidden;
+    }
+
+    #assembly_stats {
+      height: 100%;
+      width: 100%;
+    }
+
+    .asm-tab-container {
+      position: relative;
+      width: 100%;
+      height: 34px;
+      text-align: center;
+      color: #555555;
+      background-color: #cccccc;
+    }
+
+    .asm-tab {
+      position: relative;
+      width: 50%;
+      height: 30px;
+      display: inline-block;
+      font-size: 12pt;
+      line-height: 30px;
+      margin-left: -2px;
+      margin-top: 2px;
+      border: solid 2px #555555;
+      border-top: none;
+      border-bottom: none;
+      cursor: pointer;
+      border-radius: 17px;
+    }
+
+    .asm-tab.active {
+      color: black;
+      margin-top: 0;
+      border: solid 2px #555555;
+      background-color: #bbbbbb;
+    }
+
+    .asm-tab:hover {
+      margin-top: 0;
+      border: solid 2px #555555;
+    }
+
+    .asm-plot-container {
+      position: relative;
+      width: 100%;
+      height: 90%;
+      text-align: center;
+    }
+
+    .assembly_stats_left {
+      position: relative;
+      width: 50%;
+      height: 90%;
+      float: left;
+      text-align: center;
+    }
+
+    .assembly_stats_right {
+      position: relative;
+      width: 50%;
+      height: 90%;
+      float: right;
+      text-align: center;
+    }
+  </style>
+
+  <div id="assembly_stats"></div>
+
+  <script>
+    var arr = [];
+    Object.keys(localStorage).forEach(function(k,i){
+      arr[i] = new Assembly(JSON.parse(localStorage.getItem(k)));
+      arr[i].name = k;
+    })
+
+    var div = d3.select('div#assembly_stats')
+    var tab_container = div.append('div').attr('class', 'asm-tab-container')
+    views = ["circle","cumulative","table"]
+    var tabwidth = 100;
+    for (var i = 0; i < views.length; i++) {
+      var tab_div = tab_container.append('div')
+        .attr('class', function () { if (i == 0) return 'asm-tab active'; return 'asm-tab' })
+        .style('width', tabwidth)
+        .text(views[i])
+      tab_div.on('click', function () {
+        d3.selectAll('.asm-tab').classed('active', false);
+        d3.select(this).classed('active', true);
+        var view = d3.select(this).text();
+        switch (view) {
+          case 'circle':
+            plot_container.html('')
+            var span = arr.reduce(function(a,b){
+              return Math.max(a, b.assembly)
+            },0)
+            var longest = arr.reduce(function(a,b){
+              return Math.max(a,b.scaffolds[0])
+            },0)
+            arr.forEach(function(e,i){
+              plot_container.append('div').attr('id', e.name).append('p').text(e.name);
+              if(arr.length > 1){
+                var suff = i % 2 == 0 ? "assembly_stats_left" : "assembly_stats_right";
+                $("#"+e.name).addClass(suff);
+              }
+              e.drawPlot(e.name, longest, span);
+              //draw without adjusting scale
+              //e.drawPlot('asm-plot-container')
+            });
+            break;
+          case 'cumulative':
+            plot_container.html('')
+            arr[0].squarePlot('asm-plot-container');
+            //arr[0].addKey(assemblies)
+            setTimeout(function () {
+              arr.forEach(function (asm, index) {
+                if (index > 0) {
+                  var data = asm.prepareLine();
+                  arr[0].addLine(data, asm.name, asm);
+                }
+              })
+            }, 250)
+            break;
+          case 'table':
+            plot_container.html('')
+            arr[0].drawTable('asm-plot-container');
+            arr.forEach(function (asm, index) {
+              if (index > 0) {
+                arr[0].addColumn(asm);
+              }
+            })
+            break;
+        }
+      })
+    }
+    var plot_container = div.append('div').attr('class', 'asm-plot-container').attr('id', 'asm-plot-container')
+    $("div.asm-tab.active").click()
+
+  </script>
+
+</body>
+
+</html>
