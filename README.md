@@ -12,7 +12,7 @@ This flow contians the following steps
 1. Basecalling (Dorado)
 2. Quality control (pycoQC)
 3. Genome assembly (Flye)
-4. Genome assesment (BUSCO, Circleplot)
+4. Genome assesment (BUSCO, assembly-stats)
 5. More steps will be added soon. 
 
 ## What you do you need
