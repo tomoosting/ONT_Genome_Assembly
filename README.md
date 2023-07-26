@@ -19,3 +19,4 @@ This flow contians the following steps
 1. raw read data from the oxford nanopore
 2. settings under which the data was genrated
 3. rough estimate of genomes size
+4. 
