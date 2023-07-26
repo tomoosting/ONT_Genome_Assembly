@@ -9,10 +9,10 @@ Our goal is to provide people with an easy to adopt protocol for generating a re
 IMPORTANT: Only use ONT data that has generated using kit12 and R10.4 flowcells or higher. This is ONTs Q20 chemistry which genrates high-quality (~20 phred score) long-read data. Older chemistries will not be compatible for this work flow.
 
 This flow contians the following steps
-1. Basecalling (Dorado)
-2. Quality control (pycoQC)
-3. Genome assembly (Flye)
-4. Genome assesment (BUSCO, assembly-stats)
+1. Basecalling ([Dorado](https://github.com/nanoporetech/dorado))
+2. Quality control ([pycoQC](https://github.com/a-slide/pycoQC))
+3. Genome assembly ([Flye](https://github.com/fenderglass/Flye))
+4. Genome assesment ([BUSCO](https://github.com/WenchaoLin/BUSCO-Mod), [assembly-stats](https://assembly-stats.readme.io/docs))
 5. More steps will be added soon. 
 
 ## What you do you need
