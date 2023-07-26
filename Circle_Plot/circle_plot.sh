@@ -4,28 +4,24 @@
 #SBATCH --partition=quicktest
 #SBATCH --time=0-1:00
 #SBATCH --job-name=circle_plot
-#SBATCH -o /nfs/scratch/oostinto/stdout/circle_plot.%j.out
-#SBATCH -e /nfs/scratch/oostinto/stdout/circle_plot.%j.err
+#SBATCH -o ~/stdout/circle_plot.%j.out
+#SBATCH -e ~/stdout/circle_plot.%j.err
 #SBATCH --mail-type=END,FAIL
-#SBATCH --mail-user=tom.oosting@vuw.ac.nz
+#SBATCH --mail-user=your.email@gmail.com
 
-module load singularity/3.7.3
-
-PROJECT=$1
-assembly=$SCRATCH/projects/$PROJECT/output/assembly/flye/assembly.fasta
-
-out=$SCRATCH/projects/$PROJECT/output/assembly/flye/circle_plot
-
-perl=$SCRATCH/scripts/genome_assembly/flye/04_assembly_stats/circle_plot/pl/asm2stats.pl
-#perl=$SCRATCH/scripts/assembly/assembly_stats/circle_plot/pl/asm2stats.minmaxgc.pl
+#set variables
+NAME="species"
+FASTA="PATH/TO/ASSEMBLY.fasta"
+OUT="/PATH/TO/OUTPUT/DIR"
+DIR="/PATH/TO/Assembly-Stats_template"
 
 #copy template folder to output
-cp -r $SCRATCH/scripts/genome_assembly/flye/04_assembly_stats/circle_plot/ $out
+cp -r $DIR $OUT
 
 #create json file
-echo "var ${PROJECT}_flye = " > $out/json/$PROJECT'_flye.json'
-perl $perl $assembly >> $out/json/$PROJECT'_flye.json'
-echo "localStorage.setItem('${PROJECT}_flye',JSON.stringify(${PROJECT}_flye))" >> $out/json/$PROJECT'_flye.json'
+echo "var ${$NAME}_flye = " > $OUT/json/$NAME'_flye.json'
+perl $DIR/pl/asm2stats.pl $FASTA >> $OUT/json/$NAME'_flye.json'
+echo "localStorage.setItem('${$NAME}_flye',JSON.stringify(${NAME}_flye))" >> $out/json/$NAME'_flye.json'
 
 #add json to html
-sed -i s"%<!--add_jsons_here-->%  <!--add_jsons_here-->\n  <script type=\"text/javascript\" src=\"json/${PROJECT}_flye.json\"></script>%"g $out/assembly-stats.html
+sed -i s"%<!--add_jsons_here-->%  <!--add_jsons_here-->\n  <script type=\"text/javascript\" src=\"json/${NAME}_flye.json\"></script>%"g $OUT/assembly-stats.html
