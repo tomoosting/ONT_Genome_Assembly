@@ -20,3 +20,28 @@ This workflow contains the following steps
 2. settings under which the data was genrated
 3. rough estimate of genomes size
 4. 
+
+### 1. basecalling
+
+We'll use dorado to convert the raw output from your sequencing run to fastq data. Often you receive both fast5 and fastq files. In such cases basecalling is performed while output was genereted. However, it's best to redo the basecalling using a hyper acurate model.
+
+First we need to convert the fast5 files for POD5 using [pod5](https://pod5-file-format.readthedocs.io/en/latest/).
+To speed things up I've written code for an array.
+
+```
+FAST5_DIR=
+POD5_DIR=
+```
+
+```
+FAST5_N=$( ls $FAST5_DIR/*.fast5 | head -n $N | tail -n 1 )
+POD5_N=$( basename "${FAST5_N%.*}" )
+POD5_N=$( basename $POD5_N ) 
+echo "converting fast5 to pod for $FAST5_N"
+pod5 convert fast5 $FAST5_N --output $POD5_DIR/$POD5_N.pod5
+```
+This will create the same number of pod5 files as fast5 files.
+If you're not comfotable with arrays or would like only a single pod5 file you can run code like this (but can take MUCH longer!)
+```
+pod5 convert fast5 $FAST5_DIR/*.fast5 --output $POD5_DIR/$output.pod5
+```
