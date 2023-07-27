@@ -125,6 +125,7 @@ cd Flye
 make
 ```
 We can now run Flye by typing `~/bin/Flye/bin/Flye`.
+
 If you have done multiple runs on the ONT to generate the data, copy all FASTQ.gz files you want to use for your assembly to a single directory (i.e. FLYE_DATA_DIR)
 ```
 # Point towards your Flye installation
