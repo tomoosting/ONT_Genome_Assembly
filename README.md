@@ -25,13 +25,11 @@ This workflow contains the following steps
 ## 1. basecalling
 You can perform basecalling using either **dorado** or **guppy**. Dorado is the preferred basecaller but does not support all the output configurations from ONT platforms. It that case guppy still provides a good alternative to perform basecalling. This is really only an issue if you have used kit12 chemistry with R10.4 flow cells. Dorado does support basecalling for kit10 and 9.4.1 flow cells and kit14 and R10.4.1 flow cells or newer.
 
-
-
 ### basecaling with [dorado](https://github.com/nanoporetech/dorado)
-#### convert with pod5
+#### convert with [pod5](https://pod5-file-format.readthedocs.io/en/latest/)
 We'll use dorado to convert the raw output from your sequencing run to fastq data. Often you receive both fast5 and fastq files. In such cases basecalling is performed while output was genereted. However, it's best to redo the basecalling using a hyper acurate model.
 
-First we need to convert the fast5 files for POD5 using [pod5](https://pod5-file-format.readthedocs.io/en/latest/).
+First we need to convert the fast5 files for POD5 using pod5.
 To speed things up I've written code for an array.
 
 ```
@@ -51,8 +49,8 @@ If you're not comfotable with arrays or would like a single pod5 per library/run
 ```
 pod5 convert fast5 $FAST5_DIR/*.fast5 --output $POD5_DIR/$output.pod5
 ```
-#### basecall with dorado
-[Dorado](https://github.com/nanoporetech/dorado) runs on GPU!
+#### basecall with [dorado](https://github.com/nanoporetech/dorado)
+Dorado runs on GPU!
 
 It's imporant you know which 
 1. Library preperation protocol was used (e.g. kit14 SQK-LSK114)
@@ -65,7 +63,7 @@ dorado download --model dna_r10.4.1_e8.2_400bps_sup@v4.2.0
 
 Dorado basecaller 
 
-#### remove adapters with [Porechop](https://github.com/nanoporetech/duplex-tools)
+#### remove adapters with [porechop](https://github.com/nanoporetech/duplex-tools)
 Like other sequencing platforms, ONT reads can have adapter sequences attached. These we'll rempove with porechop. This program is no longers upported but it still seems to be the go to program.
 I've had some issues with installing the program due to compatibility issues on my HPC, but I've found a singulatiry container [here](https://forgemia.inra.fr/gafl/singularity/porechop). If you have experience working with singulatiry have a look at their [page](https://docs.sylabs.io/guides/3.1/user-guide/index.html). First download the image.
 ```
