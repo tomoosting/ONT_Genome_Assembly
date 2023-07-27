@@ -12,9 +12,11 @@ This workflow contains the following steps
 1. Basecalling ([dorado](https://github.com/nanoporetech/dorado) or [guppy](https://timkahlke.github.io/LongRead_tutorials/BS_G.html))
 2. Quality control ([pycoQC](https://github.com/a-slide/pycoQC))
 3. Duplex calling ([dorado](https://github.com/nanoporetech/dorado) or [guppy](https://timkahlke.github.io/LongRead_tutorials/BS_G.html))
+4. Read filtereing ([Nanofilt](https://timkahlke.github.io/LongRead_tutorials/FTR_N.html))
 4. Genome assembly ([Flye](https://github.com/fenderglass/Flye))
 5. Genome assesment ([BUSCO](https://github.com/WenchaoLin/BUSCO-Mod), [assembly-stats](https://assembly-stats.readme.io/docs))
-6. More steps will be added soon. 
+6. Error correction ([Medaka](https://timkahlke.github.io/LongRead_tutorials/ECR_ME.html))
+7. More steps will be added soon. 
 
 ## What you do you need
 * raw read data from the oxford nanopore
@@ -63,7 +65,7 @@ dorado download --model dna_r10.4.1_e8.2_400bps_sup@v4.2.0
 
 Dorado basecaller 
 
-#### remove adapters with [porechop](https://github.com/nanoporetech/duplex-tools)
+#### remove adapters with [porechop](https://github.com/rrwick/Porechop)
 Like other sequencing platforms, ONT reads can have adapter sequences attached. These we'll rempove with porechop. This program is no longers upported but it still seems to be the go to program.
 I've had some issues with installing the program due to compatibility issues on my HPC, but I've found a singulatiry container [here](https://forgemia.inra.fr/gafl/singularity/porechop). If you have experience working with singulatiry have a look at their [page](https://docs.sylabs.io/guides/3.1/user-guide/index.html). First download the image.
 ```
@@ -128,7 +130,7 @@ Q20 ONT chemistry also allows for duplex calling where you identity the template
 ### Dorado
 
 ### Guppy
-
+[duplex-tools](https://github.com/nanoporetech/duplex-tools)
 
 ## 4. Genome assembly
 If your FASTQ data looks good we can start creating a draft assembly using [flye](https://github.com/fenderglass/Flye). 
