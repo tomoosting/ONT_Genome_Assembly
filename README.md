@@ -11,9 +11,10 @@ Our goal is to provide people with an easy to adopt protocol for generating a re
 This workflow contains the following steps
 1. Basecalling ([dorado](https://github.com/nanoporetech/dorado) or [guppy](https://timkahlke.github.io/LongRead_tutorials/BS_G.html))
 2. Quality control ([pycoQC](https://github.com/a-slide/pycoQC))
-3. Genome assembly ([Flye](https://github.com/fenderglass/Flye))
-4. Genome assesment ([BUSCO](https://github.com/WenchaoLin/BUSCO-Mod), [assembly-stats](https://assembly-stats.readme.io/docs))
-5. More steps will be added soon. 
+3. Duplex calling ([dorado](https://github.com/nanoporetech/dorado) or [guppy](https://timkahlke.github.io/LongRead_tutorials/BS_G.html))
+4. Genome assembly ([Flye](https://github.com/fenderglass/Flye))
+5. Genome assesment ([BUSCO](https://github.com/WenchaoLin/BUSCO-Mod), [assembly-stats](https://assembly-stats.readme.io/docs))
+6. More steps will be added soon. 
 
 ## What you do you need
 * raw read data from the oxford nanopore
@@ -64,19 +65,31 @@ dorado download --model dna_r10.4.1_e8.2_400bps_sup@v4.2.0
 
 Dorado basecaller 
 
-
+#### remove adapters with [Porechop](https://github.com/nanoporetech/duplex-tools)
+Like other sequencing platforms, ONT reads can have adapter sequences attached. These we'll rempove with porechop. This program is no longers upported but it still seems to be the go to program.
+I've had some issues with installing the program due to compatibility issues on my HPC, but I've found a singulatiry container [here](https://forgemia.inra.fr/gafl/singularity/porechop). If you have experience working with singulatiry have a look at their [page](https://docs.sylabs.io/guides/3.1/user-guide/index.html). First download the image.
+```
+module load singularity/3.7.3
+singularity pull porechop_v0.2.3.sif oras://registry.forgemia.inra.fr/gafl/singularity/porechop/porechop:latest
+```
+Then we can run the program as follows:
+```
+module load singularity/3.7.3
+singularity exec porechop_v0.2.3.sif porechop
+```
 
 ### basecalling with [guppy](https://timkahlke.github.io/LongRead_tutorials/BS_G.html)
 basecalling with guppy is a bit more straightforward, FASTQ files are generated straight from FAST5 files.
 Guppy has both a GPU and CPU version but I'd recommand using the GPU version unless that is available on your HPC.
 
-The following command will create a FASTQ.gz file for each FAST5 file. `-i` indicates the input directory and `-r` tells guppy to search recursively. I would recommand writing the output to a temporary folder that can be removed ones all FASTQ files have been merged (next step) `-x` indicates that guppy should use all available GPU cores. `-c` indates which configuration should be used based on how the data has been generated. to get a list of all availble models you can run `guppy_basecaller --print_workflows`. `--min-score 7` filters out any reads with a phrd score below 7 (default).
+The following command will create a FASTQ.gz file for each FAST5 file. `-i` indicates the input directory and `-r` tells guppy to search recursively. I would recommand writing the output to a temporary folder that can be removed ones all FASTQ files have been merged (next step) `-x` indicates that guppy should use all available GPU cores. `-c` indates which configuration should be used based on how the data has been generated. to get a list of all availble models you can run `guppy_basecaller --print_workflows`. `--min-score 7` filters out any reads with a phrd score below 7 (default). And unlike dorado, guppy can trip adapter sequences but you have to add the flag `--trim_adapters`.
 ```
 guppy_basecaller -i FAST5_DIR               \
                  -r                         \
                  -s FASTQ_TMP               \
                  -x "cuda:0"                \
                  -c dna_r10.4_e8.1_sup.cfg  \
+                 --trim_adapters            \
                  --min_score 7              \
                  --num_callers 32
 ```
@@ -96,7 +109,7 @@ in short how to install a vitrual environment (don't do this on the login node o
 # Install package
 python3 -m pip install --user virtualenv 
 # Create vitrual environment names pycoqc_env
-python3 -m venv ~/pyton/pycoqc_env
+python3 -m venv ~/python/pycoqc_env
 # Activate environment
 source ~/pyton/pycoqc_env/bin/activate
 # You are not inside your virtunal environment where you can install pycoQC
@@ -112,8 +125,14 @@ pycoQC -f sequncing_summary.txt \
        -j output.json           \
        --min_pass_qual 7
 ```
+## 3. Duplex calling
+Q20 ONT chemistry also allows for duplex calling where you identity the template and complementary strand and combine the signal to improve read acuracy (~30 phredscore). However, this will only be possible for a certain proportion of of the total data set. I beleive at best you can get 40% of the total dataset but usesually this will be closer to 10%. Unless you have generated so much data that the duplex provides enough coverage for an assembly, you wont be using the data for the innitial assembly. These reads can be used 
+### Dorado
 
-## 3. Genome assembly
+### Guppy
+
+
+## 4. Genome assembly
 If your FASTQ data looks good we can start creating a draft assembly using [flye](https://github.com/fenderglass/Flye). 
 First, let's install Flye on your system:
 ```
@@ -141,5 +160,5 @@ $flye --nano-hq FLYE_DATA_DIR/*.fastq.gz \
 ```
 Note that the output directory must not exist, flye will create or give an error if the directory is already present. You also need to provide a rough estimate of your genome size `--genome-size`, here I expect the genome to be around 700Mb or `0.7g`. For Q20 ONT data the [Flye manual](https://github.com/fenderglass/Flye/blob/flye/docs/USAGE.md) suggests using a `--read-error` of 0.03. I prefer to run Flye with `--no-alt-contigs` and `--scaffold` as this removes alternative alleles (haplotigs) and produces the most contiguous assmebly.
 
-## 4. genome assesment 
+## 5. genome assesment 
 Now we are very curious to see how good our assembly is...
