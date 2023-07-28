@@ -32,24 +32,30 @@ You can perform basecalling using either **dorado** or **guppy**. Dorado is the 
 We'll use dorado to convert the raw output from your sequencing run to fastq data. Often you receive both fast5 and fastq files. In such cases basecalling is performed while output was genereted. However, it's best to redo the basecalling using a hyper acurate model.
 
 First we need to convert the fast5 files for POD5 using pod5.
-To speed things up I've written code for an array.
+To speed things up I've written code for an array. 
 
-```
-FAST5_DIR=/PATH/TO/FAST5_DIR
-POD5_DIR=/PATH/TO/POD5_DIR
-```
 The following piece of code retrives the name of ith fast5 file in your FAST5_DIR and creates a new file extension for the POD5 file. Then pod5 converts the ith FAST5 file in the array to POD5. This will create the same number of pod5 files as fast5 files.
 ```
-N=${SLURM_ARRAY_TASK_ID}
-FAST5_N=$( ls $FAST5_DIR/*.fast5 | head -n $N | tail -n 1 )
-POD5_N=$( basename "${FAST5_N%.*}" )
-POD5_N=$( basename $POD5_N ) 
-echo "converting fast5 to pod for $FAST5_N"
-pod5 convert fast5 $FAST5_N --output $POD5_DIR/$POD5_N.pod5
+#!/bin/bash
+#SBATCH -a 1-417
+#SBATCH --cpus-per-task=2
+#SBATCH --mem-per-cpu=5G
+#SBATCH --partition=quicktest
+#SBATCH --time=0-1:00
+#SBATCH --job-name=pod5
+
+### IMPORTANT: manually change to number of arrays (-a) to the number of file in your fast5 directory ###
+i=${SLURM_ARRAY_TASK_ID}
+FAST5_DIR=/PATH/TO/FAST5_DIR
+POD5_DIR=/PATH/TO/POD5_DIR
+NAME=$( ls $FAST5_DIR/*.fast5 | head -n $i | tail -n 1 | sed -e 's/\.fast5$//' | xargs -n 1 basename )
+
+echo "converting fast5 to pod for $NAME"
+pod5 convert fast5 $FAST5_DIR/$NAME.fast5 --output $POD5_DIR/$NAME.pod5
 ```
 If you're not comfotable with arrays or would like a single pod5 per library/run you can run the code like this (but it will take MUCH longer!)
 ```
-pod5 convert fast5 $FAST5_DIR/*.fast5 --output $POD5_DIR/$output.pod5
+pod5 convert fast5 $FAST5_DIR/*.fast5 --output $POD5_DIR/$output.pod5 
 ```
 #### basecall with [dorado](https://github.com/nanoporetech/dorado)
 Dorado runs on GPU!
