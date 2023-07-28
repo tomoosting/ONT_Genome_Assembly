@@ -50,12 +50,11 @@ FAST5_DIR=/PATH/TO/FAST5_DIR
 POD5_DIR=/PATH/TO/POD5_DIR
 NAME=$( ls $FAST5_DIR/*.fast5 | head -n $i | tail -n 1 | sed -e 's/\.fast5$//' | xargs -n 1 basename )
 
-echo "converting fast5 to pod for $NAME"
 pod5 convert fast5 $FAST5_DIR/$NAME.fast5 --output $POD5_DIR/$NAME.pod5
 ```
-If you're not comfotable with arrays or would like a single pod5 per library/run you can run the code like this (but it will take MUCH longer!)
+If you're not comfotable with arrays you can run the code like this (but it will take MUCH longer!)
 ```
-pod5 convert fast5 $FAST5_DIR/*.fast5 --output $POD5_DIR/$output.pod5 
+pod5 convert fast5 $FAST5_DIR/*.fast5 --output $POD5_DIR/$output.pod5 --one-to-one $FAST5_DIR/
 ```
 #### basecall with [dorado](https://github.com/nanoporetech/dorado)
 Dorado runs on GPU!
@@ -64,12 +63,71 @@ It's imporant you know which
 1. Library preperation protocol was used (e.g. kit14 SQK-LSK114)
 2. Flow cell was used (e.g. R10.4.1 FLO-PRO114M)
 3. Machine and speed the flow cell was run on (e.g. P2 400 bps)
-This information will let chosoe the right model --> dna_r10.4.1_e8.2_400bps_sup@v4.2.0
-```
-dorado download --model dna_r10.4.1_e8.2_400bps_sup@v4.2.0
-```
+This information will let you pick the right model --> dna_r10.4.1_e8.2_400bps_sup@v4.1.0
 
-Dorado basecaller 
+First download dorado
+```
+# download dorado
+cd ~/bin
+wget "https://cdn.oxfordnanoportal.com/software/analysis/dorado-0.3.1-linux-x64.tar.gz"
+# unpack 
+tar -xzf dorado-0.3.1-linux-x64.tar.gz
+```
+Again, for the dorado basecalling I've written an array script that allows you to basecall all your pod5 files in parallel, drastically cutting back run time. In some cases you might not be able to request enough run time to basecall all your pod5 files in series. Dorado requests a directory is input and performs casecalling on all pod5 files contained in the that directory. The following array script copies a single pod5 file to a temporary directory and performs basecalling.  
+```
+#!/bin/bash
+#SBATCH -a 3-417
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=64G
+#SBATCH --time=0-0:30:00
+#SBATCH --job-name=dorado
+
+# Code to set up GPU partition **!!!THIS MAY BE SPECIFIC TO YOUR SYSTEM!!!**
+module use /home/software/tools/eb_modulefiles/all/Core
+module unuse /home/software/tools/modulefiles
+module load GCC/10.2.0
+module load CUDA/11.1.1
+module load OpenMPI/4.0.5
+
+# Program
+dorado=~/bin/dorado-0.3.1-linux-x64/bin/dorado
+
+# Download model
+$dorado download --model dna_r10.4.1_e8.2_400bps_sup@v4.1.0
+
+# Variables
+i=${SLURM_ARRAY_TASK_ID}
+
+# Paths
+POD5_DIR=PATH/TO/POD5/DIR
+BAM_DIR=PATH/TO/BAM/OUTPUT/DIR
+mkdir -p $BAM_DIR
+
+# Extract filename from the ith pod5 file in library
+NAME=$( ls $POD5_DIR/*.pod5 | head -n $i | tail -n 1 | sed -e 's/\.pod5$//' | xargs -n 1 basename )
+
+# Create tmp dir and copy pod5 file
+TMP_DIR=$BAM_DIR/$NAME/
+mkdir -p $TMP_DIR
+cp $POD5_DIR/$NAME.pod5 $TMP_DIR
+
+# Run dorado
+$dorado basecaller dna_r10.4.1_e8.2_400bps_sup@v4.1.0 $TMP_DIR > $BAM_DIR/$NAME.bam 
+
+# Remove tmp dir
+rm -r $TMP_DIR
+```
+ 
+
+
+#### merge bam files
+
+
+#### convert bam to fastq
+
 
 #### remove adapters with [porechop](https://github.com/rrwick/Porechop)
 Like other sequencing platforms, ONT reads can have adapter sequences attached. These we'll rempove with porechop. This program is no longers upported but it still seems to be the go to program.
