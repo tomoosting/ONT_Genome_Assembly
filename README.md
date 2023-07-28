@@ -120,11 +120,23 @@ $dorado basecaller dna_r10.4.1_e8.2_400bps_sup@v4.1.0 $TMP_DIR > $BAM_DIR/$NAME.
 rm -r $TMP_DIR
 ```
 #### merge bam files and convert bam to fastq
- The next step is merging all bam files, generate stats, and convert the merged bam file to fastq.
- ```
+The next step is merging all bam files, and convert the merged bam file to fastq.gz.
+```
+module load samtools/1.10
+module load htslib/1.10
 
- ```
+BAM_DIR=PATH/TO/BAM/DIR
+BAM_OUT=PATH/TO/FINAL/BAM
+FASTQ_OUT=PATH/TO/FASTQ
 
+samtools merge $BAM_OUT.bam $BAM_OUT/*.bam
+samtools fastq $BAM_OUT.bam > $FASTQ_OUT.fastq
+bgzip $FASTQ_OUT.fastq
+```
+#### create summary file
+```
+dorado summary $BAM_EXT.bam > $BAM_EXT.sequencing_summary.txt
+```
 
 #### remove adapters with [porechop](https://github.com/rrwick/Porechop)
 Like other sequencing platforms, ONT reads can have adapter sequences attached. These we'll rempove with porechop. This program is no longers upported but it still seems to be the go to program.
