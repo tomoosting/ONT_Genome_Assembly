@@ -37,7 +37,7 @@ To speed things up I've written code for an array.
 The following piece of code retrives the name of ith fast5 file in your FAST5_DIR and creates a new file extension for the POD5 file. Then pod5 converts the ith FAST5 file in the array to POD5. This will create the same number of pod5 files as fast5 files.
 ```
 #!/bin/bash
-#SBATCH -a 1-417
+#SBATCH -a 1-10
 #SBATCH --cpus-per-task=2
 #SBATCH --mem-per-cpu=5G
 #SBATCH --partition=quicktest
@@ -56,7 +56,7 @@ If you're not comfotable with arrays you can run the code like this (but it will
 ```
 pod5 convert fast5 $FAST5_DIR/*.fast5 --output $POD5_DIR/$output.pod5 --one-to-one $FAST5_DIR/
 ```
-#### basecall with [dorado](https://github.com/nanoporetech/dorado)
+#### Basecalling with [dorado](https://github.com/nanoporetech/dorado)
 Dorado runs on GPU!
 
 It's imporant you know which 
@@ -64,7 +64,6 @@ It's imporant you know which
 2. Flow cell was used (e.g. R10.4.1 FLO-PRO114M)
 3. Machine and speed the flow cell was run on (e.g. P2 400 bps)
 This information will let you pick the right model --> dna_r10.4.1_e8.2_400bps_sup@v4.1.0
-
 First download dorado
 ```
 # download dorado
@@ -76,7 +75,7 @@ tar -xzf dorado-0.3.1-linux-x64.tar.gz
 Again, for the dorado basecalling I've written an array script that allows you to basecall all your pod5 files in parallel, drastically cutting back run time. In some cases you might not be able to request enough run time to basecall all your pod5 files in series. Dorado requests a directory is input and performs casecalling on all pod5 files contained in the that directory. The following array script copies a single pod5 file to a temporary directory and performs basecalling.  
 ```
 #!/bin/bash
-#SBATCH -a 3-417
+#SBATCH -a 1-10
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
@@ -106,7 +105,7 @@ POD5_DIR=PATH/TO/POD5/DIR
 BAM_DIR=PATH/TO/BAM/OUTPUT/DIR
 mkdir -p $BAM_DIR
 
-# Extract filename from the ith pod5 file in library
+# Extract filename from the ith pod5 file in directory
 NAME=$( ls $POD5_DIR/*.pod5 | head -n $i | tail -n 1 | sed -e 's/\.pod5$//' | xargs -n 1 basename )
 
 # Create tmp dir and copy pod5 file
@@ -120,13 +119,11 @@ $dorado basecaller dna_r10.4.1_e8.2_400bps_sup@v4.1.0 $TMP_DIR > $BAM_DIR/$NAME.
 # Remove tmp dir
 rm -r $TMP_DIR
 ```
- 
+#### merge bam files and convert bam to fastq
+ The next step is merging all bam files, generate stats, and convert the merged bam file to fastq.
+ ```
 
-
-#### merge bam files
-
-
-#### convert bam to fastq
+ ```
 
 
 #### remove adapters with [porechop](https://github.com/rrwick/Porechop)
