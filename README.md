@@ -80,7 +80,7 @@ Again, for the dorado basecalling I've written an array script that allows you t
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
-#SBATCH --mem=64G
+#SBATCH --mem=39G
 #SBATCH --time=0-0:30:00
 #SBATCH --job-name=dorado
 
