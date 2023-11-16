@@ -10,19 +10,20 @@ Our goal is to provide people with an easy to adopt protocol for generating a re
 
 This workflow contains the following steps
 1. Basecalling ([dorado](https://github.com/nanoporetech/dorado) or [guppy](https://timkahlke.github.io/LongRead_tutorials/BS_G.html))
-2. Quality control ([pycoQC](https://github.com/a-slide/pycoQC))
-3. Duplex calling ([dorado](https://github.com/nanoporetech/dorado) or [guppy](https://timkahlke.github.io/LongRead_tutorials/BS_G.html))
-4. Read filtereing ([Nanofilt](https://timkahlke.github.io/LongRead_tutorials/FTR_N.html))
-4. Genome assembly ([Flye](https://github.com/fenderglass/Flye))
+2. Quality trimming (porechop, clean)
+3. Read filtereing (chopper)
+4. Quality control ([pycoQC](https://github.com/a-slide/pycoQC), Nanoplot)
+5. Genome assembly ([Flye](https://github.com/fenderglass/Flye))
+6. Error correction ([Racon](https://github.com/isovic/racon),[Medaka](https://timkahlke.github.io/LongRead_tutorials/ECR_ME.html), [PurgeHaplotypes](https://github.com/skingan/purge_haplotigs_multiBAM))
 5. Genome assesment ([BUSCO](https://github.com/WenchaoLin/BUSCO-Mod), [assembly-stats](https://assembly-stats.readme.io/docs))
-6. Error correction ([Medaka](https://timkahlke.github.io/LongRead_tutorials/ECR_ME.html))
+6. 
 7. More steps will be added soon. 
 
 ## What you do you need
 * raw read data from the oxford nanopore
 * settings under which the data was genrated
 * rough estimate of genomes size 
-* a High Performance Computing cluster with a GPU partition
+* a High Performance Computing cluster with the ability to run programs using both CPU and GPU
 
 ## 1. basecalling
 You can perform basecalling using either **dorado** or **guppy**. Dorado is the preferred basecaller but does not support all the output configurations from ONT platforms. It that case guppy still provides a good alternative to perform basecalling. This is really only an issue if you have used kit12 chemistry with R10.4 flow cells. Dorado does support basecalling for kit10 and 9.4.1 flow cells and kit14 and R10.4.1 flow cells or newer.
@@ -184,7 +185,7 @@ python3 -m pip install --user virtualenv
 # Create vitrual environment names pycoqc_env
 python3 -m venv ~/python/pycoqc_env
 # Activate environment
-source ~/pyton/pycoqc_env/bin/activate
+source ~/python/pycoqc_env/bin/activate
 # You are not inside your virtunal environment where you can install pycoQC
 pip install pycoQC
 # Exit virtual environment
@@ -198,13 +199,6 @@ pycoQC -f sequncing_summary.txt \
        -j output.json           \
        --min_pass_qual 7
 ```
-## 3. Duplex calling
-Q20 ONT chemistry also allows for duplex calling where you identity the template and complementary strand and combine the signal to improve read acuracy (~30 phredscore). However, this will only be possible for a certain proportion of of the total data set. I beleive at best you can get 40% of the total dataset but usesually this will be closer to 10%. Unless you have generated so much data that the duplex provides enough coverage for an assembly, you wont be using the data for the innitial assembly. These reads can be used 
-### Dorado
-
-### Guppy
-[duplex-tools](https://github.com/nanoporetech/duplex-tools)
-
 ## 4. Genome assembly
 If your FASTQ data looks good we can start creating a draft assembly using [flye](https://github.com/fenderglass/Flye). 
 First, let's install Flye on your system:
@@ -235,3 +229,9 @@ Note that the output directory must not exist, flye will create or give an error
 
 ## 5. genome assesment 
 Now we are very curious to see how good our assembly is...
+### Busco
+
+
+### Circle plot
+
+ 
