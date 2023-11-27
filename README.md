@@ -85,9 +85,7 @@ Again, for the dorado basecalling I've written an array script that allows you t
 #SBATCH --time=0-0:30:00
 #SBATCH --job-name=dorado
 
-# Code to set up GPU partition **!!!THIS MAY BE SPECIFIC TO YOUR SYSTEM!!!**
-module use /home/software/tools/eb_modulefiles/all/Core
-module unuse /home/software/tools/modulefiles
+# Code to set up GPU partition **!!!THIS WILL BE SPECIFIC TO YOUR HPC!!!**
 module load GCC/10.2.0
 module load CUDA/11.1.1
 module load OpenMPI/4.0.5
@@ -193,7 +191,7 @@ deactivate
 ```
 Now that pycoQC is installed we can run it using the following code
 ```
-source ~/pyton/pycoqc_env/bin/activate
+source ~/python/pycoqc_env/bin/activate
 pycoQC -f sequncing_summary.txt \
        -o output.html           \
        -j output.json           \
@@ -228,10 +226,66 @@ $flye --nano-hq FLYE_DATA_DIR/*.fastq.gz \
 Note that the output directory must not exist, flye will create or give an error if the directory is already present. You also need to provide a rough estimate of your genome size `--genome-size`, here I expect the genome to be around 700Mb or `0.7g`. For Q20 ONT data the [Flye manual](https://github.com/fenderglass/Flye/blob/flye/docs/USAGE.md) suggests using a `--read-error` of 0.03. I prefer to run Flye with `--no-alt-contigs` and `--scaffold` as this removes alternative alleles (haplotigs) and produces the most contiguous assmebly.
 
 ## 5. genome assesment 
-Now we are very curious to see how good our assembly is...
-### Busco
+To assess how completenes and contiguous the assembly is we can use [BUSCO](https://busco.ezlab.org/busco_userguide.html) and [assembly-stats](https://github.com/rjchallis/assembly-stats).
+
+### BUSCO
+BUSCO tries to find a set of genes to determine completeness of the genome.
+We will use Singularity to to run BUSCO.
+First download the Singularity image (.sif)
+```
+**!!!THIS WILL BE SPECIFIC TO YOUR CLUSTER!!!**
+module load GCC/10.2.0
+module load OpenMPI/4.0.5
+module load Singularity/3.7.3
+
+singularity pull docker://ezlabgva/busco:v5.2.2_cv1
+```
+
+```
+**!!!THIS WILL BE SPECIFIC TO YOUR CLUSTER!!!**
+module load GCC/10.2.0
+module load OpenMPI/4.0.5
+module load Singularity/3.7.3
+
+singularity run busco:v5.2.2_cv1.sif busco -i $ASSEMBLY_DIR/assembly.fasta  \ 
+                                           -o busco_assembly                \
+                                           -l actinopterygii_odb10          \
+                                           -m genome                        \
+                                           --cpu 10
+```
 
 
-### Circle plot
+### Assembly-stats
+Assembly-stats procuces a circle plot. To run this using the provides script you'll have to download the circle_plot folder in this repository and place it in the same directory as the script.
+```
+#!/bin/bash
+#SBATCH --cpus-per-task=2
+#SBATCH --mem-per-cpu=5G
+#SBATCH --partition=quicktest
+#SBATCH --time=0-1:00
+#SBATCH --job-name=circle_plot
 
- 
+PROJECT=$1 #species name
+
+#directory where your flye assembly.fasta is
+ASSEMBLY_DIR=/PATH/TO/FLYE/ASSEMBLY  
+
+#output directory where output is written to
+OUT_DIR=/PATH/TO/BUSCO/DIR
+mkdir -p $OUT_DIR
+
+#perl script
+asm2stats=./circle_plot/pl/asm2stats.pl
+
+#copy template folder to OUT_DIR
+cp -r ./circle_plot/* $OUT_DIR
+
+#create json file
+echo "var ${PROJECT} = " > $OUT_DIR/json/$PROJECT'.json'
+perl $asm2stats $ASSEMBLY_DIR/assembly.fasta >> $OUT_DIR/json/$PROJECT'.json'
+echo "localStorage.setItem('${PROJECT}',JSON.stringify(${PROJECT}))" >> $OUT_DIR/json/$PROJECT'.json'
+
+#add json to html
+sed -i s"%<!--add_jsons_here-->%  <!--add_jsons_here-->\n  <script type=\"text/javascript\" src=\"json/${PROJECT}.json\"></script>%"g $OUT_DIR/assembly-stats.html
+```
+Afterwards, copy the entire circle_plot folder this is in `OUT_DIR` to your PC and open up the assemble-stats.html file to view the results.
