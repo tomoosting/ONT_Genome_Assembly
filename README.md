@@ -11,7 +11,7 @@ Our goal is to provide people with an easy to adopt protocol for generating a re
 This workflow contains the following steps
 1. Basecalling ([dorado](https://github.com/nanoporetech/dorado) or [guppy](https://timkahlke.github.io/LongRead_tutorials/BS_G.html))
 2. Quality trimming (porechop, clean)
-3. Read filtereing (chopper)
+3. Read filtering (chopper)
 4. Quality control ([pycoQC](https://github.com/a-slide/pycoQC), Nanoplot)
 5. Genome assembly ([Flye](https://github.com/fenderglass/Flye))
 6. Error correction ([Racon](https://github.com/isovic/racon),[Medaka](https://timkahlke.github.io/LongRead_tutorials/ECR_ME.html), [PurgeHaplotypes](https://github.com/skingan/purge_haplotigs_multiBAM))
@@ -119,34 +119,26 @@ $dorado basecaller dna_r10.4.1_e8.2_400bps_sup@v4.1.0 $TMP_DIR > $BAM_DIR/$NAME.
 rm -r $TMP_DIR
 ```
 #### merge bam files and convert bam to fastq
-The next step is merging all bam files, and convert the merged bam file to fastq.gz.
+The next step is merging all bam files and convert with samtools, then compress using bgzip.
 ```
-module load samtools/1.10
-module load htslib/1.10
-
-BAM_DIR=PATH/TO/BAM/DIR
-BAM_OUT=PATH/TO/FINAL/BAM
-FASTQ_OUT=PATH/TO/FASTQ
-
 samtools merge $BAM_OUT.bam $BAM_OUT/*.bam
 samtools fastq $BAM_OUT.bam > $FASTQ_OUT.fastq
 bgzip $FASTQ_OUT.fastq
 ```
 #### create summary file
+
 ```
 dorado summary $BAM_EXT.bam > $BAM_EXT.sequencing_summary.txt
 ```
 
 #### remove adapters with [porechop](https://github.com/rrwick/Porechop)
 Like other sequencing platforms, ONT reads can have adapter sequences attached. These we'll rempove with porechop. This program is no longers upported but it still seems to be the go to program.
-I've had some issues with installing the program due to compatibility issues on my HPC, but I've found a singulatiry container [here](https://forgemia.inra.fr/gafl/singularity/porechop). If you have experience working with singulatiry have a look at their [page](https://docs.sylabs.io/guides/3.1/user-guide/index.html). First download the image.
+I've had some issues with installing the program due to compatibility issues on my HPC, but I've found a singulatiry container [here](https://forgemia.inra.fr/gafl/singularity/porechop). If you don't have experience working with singulatiry have a look at their [page](https://docs.sylabs.io/guides/3.1/user-guide/index.html). First download the image.
 ```
-module load singularity/3.7.3
 singularity pull porechop_v0.2.3.sif oras://registry.forgemia.inra.fr/gafl/singularity/porechop/porechop:latest
 ```
 Then we can run the program as follows:
 ```
-module load singularity/3.7.3
 singularity exec porechop_v0.2.3.sif porechop
 ```
 
@@ -154,7 +146,7 @@ singularity exec porechop_v0.2.3.sif porechop
 basecalling with guppy is a bit more straightforward, FASTQ files are generated straight from FAST5 files.
 Guppy has both a GPU and CPU version but I'd recommand using the GPU version unless that is available on your HPC.
 
-The following command will create a FASTQ.gz file for each FAST5 file. `-i` indicates the input directory and `-r` tells guppy to search recursively. I would recommand writing the output to a temporary folder that can be removed ones all FASTQ files have been merged (next step) `-x` indicates that guppy should use all available GPU cores. `-c` indates which configuration should be used based on how the data has been generated. to get a list of all availble models you can run `guppy_basecaller --print_workflows`. `--min-score 7` filters out any reads with a phrd score below 7 (default). And unlike dorado, guppy can trip adapter sequences but you have to add the flag `--trim_adapters`.
+The following command will create a FASTQ.gz file for each FAST5 file. `-i` indicates the input directory and `-r` tells guppy to search recursively. I would recommand writing the output to a temporary folder that can be removed ones all FASTQ files have been merged (next step) `-x` indicates that guppy should use all available GPU cores. `-c` indates which configuration should be used based on how the data has been generated. to get a list of all availble models you can run `guppy_basecaller --print_workflows`. `--min-score 7` filters out any reads with a phrd score below 7 (default). And unlike dorado, guppy can trim adapter sequences but you have to add the flag `--trim_adapters`.
 ```
 guppy_basecaller -i FAST5_DIR               \
                  -r                         \
