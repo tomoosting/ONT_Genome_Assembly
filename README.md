@@ -14,10 +14,12 @@ This workflow contains the following steps
 3. Read filtering (chopper)
 4. Quality control ([pycoQC](https://github.com/a-slide/pycoQC), Nanoplot)
 5. Genome assembly ([Flye](https://github.com/fenderglass/Flye))
-6. Error correction ([Racon](https://github.com/isovic/racon),[Medaka](https://timkahlke.github.io/LongRead_tutorials/ECR_ME.html), [PurgeHaplotypes](https://github.com/skingan/purge_haplotigs_multiBAM))
-5. Genome assesment ([BUSCO](https://github.com/WenchaoLin/BUSCO-Mod), [assembly-stats](https://assembly-stats.readme.io/docs))
-6. 
-7. More steps will be added soon. 
+6. extract mitochondrial genome
+7. Error correction ([Racon](https://github.com/isovic/racon),[Medaka](https://timkahlke.github.io/LongRead_tutorials/ECR_ME.html), [PurgeHaplotypes](https://github.com/skingan/purge_haplotigs_multiBAM))
+8. Genome assesment ([BUSCO](https://github.com/WenchaoLin/BUSCO-Mod), [assembly-stats](https://assembly-stats.readme.io/docs))
+9. Repeat masking
+10. annotation
+
 
 ## What you do you need
 * raw read data from the oxford nanopore
@@ -281,3 +283,64 @@ echo "localStorage.setItem('${PROJECT}',JSON.stringify(${PROJECT}))" >> $OUT_DIR
 sed -i s"%<!--add_jsons_here-->%  <!--add_jsons_here-->\n  <script type=\"text/javascript\" src=\"json/${PROJECT}.json\"></script>%"g $OUT_DIR/assembly-stats.html
 ```
 Afterwards, copy the entire circle_plot folder this is in `OUT_DIR` to your PC and open up the assemble-stats.html file to view the results.
+
+## 9. Repeat Masking
+In order to annotate the genome we first need to mask repeat regions in the genome. To do this we'll use singularity image from [dfam](https://github.com/Dfam-consortium/TETools). Repeats will be masked based on transposabe elements (TE) identified in the assembly and known repeat sequences present in Dfam and RepBase libraries. While the singularity container comes with a Dfam library, there is a much more extentive one (PLEASE NOTE: the extensive dfam library is 700Gb to make sure you have enough space on your system.). There is also an old (but free) RepBase library you can download. We will first download these two liraries and then download and configure the singularity image.  
+```
+#create a directory to download the dfam and RepBase liraries
+mkdir /path/to/Repeat_masker_dir
+cd /path/to/Repeat_masker_dir
+#download Dfam and check if download is corrupted
+wget "https://www.dfam.org/releases/Dfam_3.7/families/Dfam.h5.gz"
+wget "https://www.dfam.org/releases/Dfam_3.7/families/Dfam.h5.gz.md5"
+md5sum check Dfam.h5.gz.md5
+gzip -d Dfam.h5.gz > Dfam.h5
+#download RepBase
+#if wget doesn't work you can download the file manually from github and transfer to your system (this file is not big)
+wget https://github.com/yjx1217/RMRB/blob/master/RepBaseRepeatMaskerEdition-20181026.tar.gz
+tar -xzf RepBaseRepeatMaskerEdition-20181026.tar.gz
+mv ./Libraries/* .
+rm -r ./Libraries
+```
+This should produce 3 files: `Dfam.h5`, `RMRBSeqs.embl` and `README.RMRBSeqs`. 
+Next we will download the singulatity imamge `dfam-tetools-latest.sif` and update the libraries.
+```
+#download and create singularity image
+singularity pull dfam-tetools-latest.sif docker://dfam/tetools:latest
+
+#enter the container in interactive mode
+singularity shell /path/to/dfam_container/dfam-tetools-latest.sif
+
+#copy the lirary directory (i.e. Libraries)
+cp -r /opt/RepeatMasker/Libraries/ /path/to/Repeat_masker_dir
+
+#exit interactive mode
+exit
+
+#remove the old Dfam lib 
+rm ./Libraries/Dfam.h5
+
+#move the new libraries to Liraries fodler
+mv * ./Libraries/
+
+#update the singularity image
+singularity exec dfam-tetools-latest.sif addRepBase.pl -libdir Libraries
+```
+Now that we have created the RepeatMasker singularity image, downloaded the Dfam and RepBase libraries, and updated the singularity image.
+
+Now we have prepaired our singularity image so we can run both [RepeatModeler](https://www.repeatmasker.org/RepeatModeler/) and RepeatMasker. This section includes the follwoing steps
+1. build a database 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
