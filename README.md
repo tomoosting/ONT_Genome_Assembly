@@ -14,7 +14,7 @@ This workflow contains the following steps
 3. Read filtering (chopper)
 4. Quality control ([pycoQC](https://github.com/a-slide/pycoQC), Nanoplot)
 5. Genome assembly ([Flye](https://github.com/fenderglass/Flye))
-6. extract mitochondrial genome
+6. extract mitocgenome ([Bandage]())
 7. Error correction ([Racon](https://github.com/isovic/racon),[Medaka](https://timkahlke.github.io/LongRead_tutorials/ECR_ME.html), [PurgeHaplotypes](https://github.com/skingan/purge_haplotigs_multiBAM))
 8. Genome assesment ([BUSCO](https://github.com/WenchaoLin/BUSCO-Mod), [assembly-stats](https://assembly-stats.readme.io/docs))
 9. Repeat masking
@@ -288,13 +288,15 @@ Afterwards, copy the entire circle_plot folder this is in `OUT_DIR` to your PC a
 In order to annotate the genome we first need to mask repeat regions in the genome. To do this we'll use singularity image from [dfam](https://github.com/Dfam-consortium/TETools). Repeats will be masked based on transposabe elements (TE) identified in the assembly and known repeat sequences present in Dfam and RepBase libraries. While the singularity container comes with a Dfam library, there is a much more extentive one (PLEASE NOTE: the extensive dfam library is 700Gb to make sure you have enough space on your system.). There is also an old (but free) RepBase library you can download. We will first download these two liraries and then download and configure the singularity image.  
 ```
 #create a directory to download the dfam and RepBase liraries
-mkdir /path/to/Repeat_masker_dir
-cd /path/to/Repeat_masker_dir
+mkdir /path/to/Repeat_masker_libs
+cd /path/to/Repeat_masker_libs
+
 #download Dfam and check if download is corrupted
 wget "https://www.dfam.org/releases/Dfam_3.7/families/Dfam.h5.gz"
 wget "https://www.dfam.org/releases/Dfam_3.7/families/Dfam.h5.gz.md5"
 md5sum check Dfam.h5.gz.md5
 gzip -d Dfam.h5.gz > Dfam.h5
+
 #download RepBase
 #if wget doesn't work you can download the file manually from github and transfer to your system (this file is not big)
 wget https://github.com/yjx1217/RMRB/blob/master/RepBaseRepeatMaskerEdition-20181026.tar.gz
@@ -308,19 +310,13 @@ Next we will download the singulatity imamge `dfam-tetools-latest.sif` and updat
 #download and create singularity image
 singularity pull dfam-tetools-latest.sif docker://dfam/tetools:latest
 
-#enter the container in interactive mode
+#enter the container in interactive mode and copy the lirary to outside the container
 singularity shell /path/to/dfam_container/dfam-tetools-latest.sif
-
-#copy the lirary directory (i.e. Libraries)
-cp -r /opt/RepeatMasker/Libraries/ /path/to/Repeat_masker_dir
-
-#exit interactive mode
+cp -r /opt/RepeatMasker/Libraries/ /path/to/Repeat_masker_libs
 exit
 
-#remove the old Dfam lib 
+#remove the old Dfam lib and move the new libraries to Liraries fodler
 rm ./Libraries/Dfam.h5
-
-#move the new libraries to Liraries fodler
 mv * ./Libraries/
 
 #update the singularity image
@@ -328,8 +324,51 @@ singularity exec dfam-tetools-latest.sif addRepBase.pl -libdir Libraries
 ```
 Now that we have created the RepeatMasker singularity image, downloaded the Dfam and RepBase libraries, and updated the singularity image.
 
-Now we have prepaired our singularity image so we can run both [RepeatModeler](https://www.repeatmasker.org/RepeatModeler/) and RepeatMasker. This section includes the follwoing steps
-1. build a database 
+Now we have prepaired our singularity image so we can run both [RepeatModeler](https://www.repeatmasker.org/RepeatModeler/) and [RepeatMasker](https://www.repeatmasker.org/). This section includes the follwoing steps:
+1. build a database from your assembly
+2. Identify TEs
+3. extract known repeat sequences 
+4. merge output from steps 2 & 3 
+5. mask repeats
+6. convert to hardmasked
+```
+#export PATH to libraries created in previous section
+export LIBDIR=/path/to/Repeat_masker_libs/Libraries
+
+#create output directory for outout
+PURGE_DIR=/path/to/purge_haplpotypes/
+REPEAT_DIR=/path/to/repeat/output/
+mkdir $REPEAT_DIR
+
+#1. build database
+mkdir $REPEAT_DIR/libraries
+singularity run dfam-tetools-latest.sif BuildDatabase -name $REPEAT_DIR/libraries/repeat_modeler_db \
+                                                      -engine ncbi                                  \
+                                                      $PURGE_DIR/assembly.fasta
+
+#2. Identify TEs
+singularity run dfam-tetools-latest.sif RepeatModeler -threads 32                                 \
+                                                      -LTRStruct                                  \
+                                                      -database $REPEAT_DIR/libraries/$ASSEMBLY'_db'
+
+#3. check if taxonomic group is available 
+singularity exec dfam-tetools-latest.sif famdb.py -i /nfs/scratch/oostinto/RepeatMasker/Libraries/RepeatMaskerLib.h5 lineage -ad 'Actinopterygii'
+#extract repeats
+singularity exec dfam-tetools-latest.sif famdb.py -i /nfs/scratch/oostinto/RepeatMasker/Libraries/RepeatMaskerLib.h5 families -ad --add-reverse-complement Actinopterygii > $REPEAT_DIR/Actinopterygii_library.fa
+
+#4. merge dfam and repeatmodeler databases
+cat $REPEAT_DIR/libraries/repeat_modeler_db-families.fa $REPEAT_DIR/libraries/Actinopterygii_library.fa > $REPEAT_DIR/libraries/combined_library.fa
+
+#5. run repeatmasker
+singularity exec dfam-tetools-latest.sif RepeatMasker -pa 32                   \
+                                                      -dir $REPEAT_DIR         \
+                                                      -xsmall                  \
+                                                      -lib $REPEAT_DIR/libraries/combined_library.fa $PURGE_DIR/assembly.fasta
+mv $REPEAT_DIR/results/assembly.fasta.masked $REPEAT_DIR/assembly.softmasked.fasta
+
+#6. convert softmasked to hardmasked
+sed 's/(acgt)/N/g' $REPEAT_DIRassembly.softmasked.ordered.fasta > $REPEAT_DIR/results/assembly.hardmasked.ordered.fasta
+```
 
 
 
