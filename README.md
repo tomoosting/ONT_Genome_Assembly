@@ -148,7 +148,7 @@ singularity exec porechop_v0.2.3.sif porechop
 basecalling with guppy is a bit more straightforward, FASTQ files are generated straight from FAST5 files.
 Guppy has both a GPU and CPU version but I'd recommand using the GPU version unless that is available on your HPC.
 
-The following command will create a FASTQ.gz file for each FAST5 file. `-i` indicates the input directory and `-r` tells guppy to search recursively. I would recommand writing the output to a temporary folder that can be removed ones all FASTQ files have been merged (next step) `-x` indicates that guppy should use all available GPU cores. `-c` indates which configuration should be used based on how the data has been generated. to get a list of all availble models you can run `guppy_basecaller --print_workflows`. `--min-score 7` filters out any reads with a phrd score below 7 (default). And unlike dorado, guppy can trim adapter sequences but you have to add the flag `--trim_adapters`.
+The following command will create a FASTQ.gz file for each FAST5 file. `-i` indicates the input directory and `-r` tells guppy to search recursively. I would recommand writing the output to a temporary folder that can be removed ones all FASTQ files have been merged (next step) `-x` indicates that guppy should use all available GPU cores. `-c` indates which configuration should be used based on how the data has been generated. to get a list of all availble models you can run `guppy_basecaller --print_workflows`. `--min-score 8` filters out any reads with a phrd score below 8. And unlike dorado, guppy can trim adapter sequences but you have to add the flag `--trim_adapters`.
 ```
 guppy_basecaller -i FAST5_DIR               \
                  -r                         \
@@ -370,12 +370,49 @@ mv $REPEAT_DIR/results/assembly.fasta.masked $REPEAT_DIR/assembly.softmasked.fas
 sed 's/(acgt)/N/g' $REPEAT_DIRassembly.softmasked.ordered.fasta > $REPEAT_DIR/results/assembly.hardmasked.ordered.fasta
 ```
 
+## 10. Genome annotation
 
+To annotate the genome we well use [braker3](https://github.com/Gaius-Augustus/BRAKER), a fully automated pipeline that can uitlise RNA-seq + genome assembly and genome assembly only. Because we don't have RNA-seq data we will use the genome assembly only pipeline. Have a look at the braker github to get a detailed description of the steps.
 
+First, we'll download the nessesary files. And again, we'll use a singularity container.
+```
+#build container
+singularity build braker3.sif docker://teambraker/braker3:latest
 
+#Download [ortho-db](https://bioinf.uni-greifswald.de/bioinf/partitioned_odb11/) tuitable for your species. Here I download a protein database for vertebrates. 
+wget "https://bioinf.uni-greifswald.de/bioinf/partitioned_odb11/Vertebrata.fa.gz"
+gunzip Vertebrata.fa.gz > Vertebrata.fa
+```
+You will also need to obtain the config folder from Augustus and place it at a writable location. You can find the config fodler on the github page from [Augustus](https://github.com/Gaius-Augustus/Augustus). Download the config folder and put it on a an accessable location.
 
+Braker runs on the soft-masked version of your assembly using the following code
+```
+#Augustus config
+AUG_CONFIG=/nfs/scratch/oostinto/scripts/genome_assembly/7_Annotation/config
+#ortho_db
+ORTHO_DB=/nfs/scratch/oostinto/databases/ortho_db11/Vertebrata.fa
+SOFTMASKED_FASTA=$READ_DIR/$ASSEMBLER/4_repeat_masking/...
+BRAKER_DIR=$READ_DIR/$ASSEMBLER/6_annotation/
 
+#create output directory
+mkdir -p $BRAKER_DIR
 
+#run braker3
+singularity exec -B braker3.sif braker.pl --AUGUSTUS_CONFIG_PATH=$AUG_CONFIG   \
+                                          --species=species_name               \
+                                          --genome=$SOFTMASKED_FASTA           \
+                                          --prot_seq=$ORTHO_DB                 \
+                                          --workingdir=$BRAKER_DIR             \
+                                          --threads=32                         \                                 --busco_lineage=actinopterygii_odb10 \
+                                          --gff3
+```
+note that I use the same lineage for BUSCO as earlier
+
+Finally, to identify genes I would recommand using [blast2go](https://www.blast2go.com/). 
+You can run this on either your desktop or cluster. I personally run this locally on my laptop.
+I use the swissprot database which is a curated database.
+You will also need the output from braker i.e. braker.codingseq which is used is the input.
+Be aware, it may run a few days on your laptop.
 
 
 
