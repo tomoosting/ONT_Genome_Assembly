@@ -5,21 +5,23 @@ This repository will soon contain all documentation for performing a de novo gen
 This Repository contains a step by step workflow for performing a de novo assembly using only Oxford Nanopre Technology (ONT) data.
 Our goal is to provide people with an easy to adopt protocol for generating a reference genome.
 
+**IMPORTANT**: 
+* The workflow assumes data has been generated using R10.4.1 flowcells with kit14 chemistry (or higher)
+* You have some basic coding skills for setting up and executing bash scripts
+* I would recommand generating ~50X coverage of raw sequencing data.
 
-**IMPORTANT**: Only use ONT data that has generated using kit12 and R10.4 flowcells or higher. This is ONTs Q20 chemistry which genrates high-quality (~20 phred score) long-read data. Older chemistries will not be compatible for this work flow. I'd also recommand generating ~50X coverage of raw sequencing data. For this you need to have a rough idea of how large your genome will be. For example, if the expected genome size is 1Gb you want to sequence approximately 50 gigabases (Gb) of data.
-
-This workflow contains the following steps
+**This workflow contains the following steps**
 1. Basecalling ([dorado](https://github.com/nanoporetech/dorado)
 2. Quality trimming (porechop, clean, FCX)
 3. Read filtering (chopper)
 4. Quality control (Nanoplot)
 5. Genome assembly (Hifiasm, Flye)
-6. extract mitocgenome (Bandage)
+6. Mitochondiral genome assembly
 7. Error correction [Medaka](https://timkahlke.github.io/LongRead_tutorials/ECR_ME.html)
 8. Genome assesment ([BUSCO](https://github.com/WenchaoLin/BUSCO-Mod))
 9. Repeat masking
 10. annotation
-
+11. Functional annotation
 
 ## What you do you need
 * raw read data from the oxford nanopore
@@ -28,7 +30,7 @@ This workflow contains the following steps
 * a High Performance Computing cluster with the ability to run programs using both CPU and GPU
 
 ## 1. basecalling
-You can perform basecalling using either **dorado** or **guppy**. Dorado is the preferred basecaller but does not support all the output configurations from ONT platforms. It that case guppy still provides a good alternative to perform basecalling. This is really only an issue if you have used kit12 chemistry with R10.4 flow cells. Dorado does support basecalling for kit10 and 9.4.1 flow cells and kit14 and R10.4.1 flow cells or newer.
+You can perform basecalling using **dorado**
 
 ### basecaling with [dorado](https://github.com/nanoporetech/dorado)
 #### convert with [pod5](https://pod5-file-format.readthedocs.io/en/latest/)
