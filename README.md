@@ -3,7 +3,7 @@
 This repository will soon contain all documentation for performing a de novo genome assembly using Oxford Nanopore data.
 
 This Repository contains a step by step workflow for performing a de novo assembly using only Oxford Nanopre Technology (ONT) data.
-Our goal is to provide people with an easy to adopt protocol for generating a reference genome.
+Our goal is to provide people with an easy to adopt protocol for generating a reference genome using a single sequencing technology. 
 
 **IMPORTANT**: 
 * The workflow assumes data has been generated using R10.4.1 flowcells with kit14 chemistry (or higher)
@@ -11,7 +11,7 @@ Our goal is to provide people with an easy to adopt protocol for generating a re
 * I would recommand generating ~50X coverage of raw sequencing data.
 
 **This workflow contains the following steps**
-1. Basecalling ([dorado](https://github.com/nanoporetech/dorado)
+1. Basecalling ([dorado](https://github.com/nanoporetech/dorado))
 2. Quality trimming (porechop, clean, FCX)
 3. Read filtering (chopper)
 4. Quality control (Nanoplot)
