@@ -1,6 +1,6 @@
 # De novo genome assembly using Oxford Nanopore 
 ## !!REPO UNDER CONSTRUCTION!!
-This repository will soon contain all documentation for performing a de novo genome allembly using Oxford Nanopore data.
+This repository will soon contain all documentation for performing a de novo genome assembly using Oxford Nanopore data.
 
 This Repository contains a step by step workflow for performing a de novo assembly using only Oxford Nanopre Technology (ONT) data.
 Our goal is to provide people with an easy to adopt protocol for generating a reference genome.
@@ -9,14 +9,14 @@ Our goal is to provide people with an easy to adopt protocol for generating a re
 **IMPORTANT**: Only use ONT data that has generated using kit12 and R10.4 flowcells or higher. This is ONTs Q20 chemistry which genrates high-quality (~20 phred score) long-read data. Older chemistries will not be compatible for this work flow. I'd also recommand generating ~50X coverage of raw sequencing data. For this you need to have a rough idea of how large your genome will be. For example, if the expected genome size is 1Gb you want to sequence approximately 50 gigabases (Gb) of data.
 
 This workflow contains the following steps
-1. Basecalling ([dorado](https://github.com/nanoporetech/dorado) or [guppy](https://timkahlke.github.io/LongRead_tutorials/BS_G.html))
-2. Quality trimming (porechop, clean)
+1. Basecalling ([dorado](https://github.com/nanoporetech/dorado)
+2. Quality trimming (porechop, clean, FCX)
 3. Read filtering (chopper)
-4. Quality control ([pycoQC](https://github.com/a-slide/pycoQC), Nanoplot)
-5. Genome assembly ([Flye](https://github.com/fenderglass/Flye))
-6. extract mitocgenome ([Bandage]())
-7. Error correction ([Racon](https://github.com/isovic/racon),[Medaka](https://timkahlke.github.io/LongRead_tutorials/ECR_ME.html), [PurgeHaplotypes](https://github.com/skingan/purge_haplotigs_multiBAM))
-8. Genome assesment ([BUSCO](https://github.com/WenchaoLin/BUSCO-Mod), [assembly-stats](https://assembly-stats.readme.io/docs))
+4. Quality control (Nanoplot)
+5. Genome assembly (Hifiasm, Flye)
+6. extract mitocgenome (Bandage)
+7. Error correction [Medaka](https://timkahlke.github.io/LongRead_tutorials/ECR_ME.html)
+8. Genome assesment ([BUSCO](https://github.com/WenchaoLin/BUSCO-Mod))
 9. Repeat masking
 10. annotation
 
