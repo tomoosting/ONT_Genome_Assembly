@@ -1,5 +1,6 @@
 # De novo genome assembly using Oxford Nanopore 
-## !!REPO UNDER CONSTRUCTION!!
+!!REPO UNDER CONSTRUCTION!!
+
 This repository will soon contain all documentation for performing a de novo genome assembly using Oxford Nanopore data.
 
 This Repository contains a step by step workflow for performing a de novo assembly using only Oxford Nanopre Technology (ONT) data.
@@ -8,75 +9,63 @@ Our goal is to provide people with an easy to adopt protocol for generating a re
 **IMPORTANT**: 
 * The workflow assumes data has been generated using R10.4.1 flowcells with kit14 chemistry (or higher)
 * You have some basic coding skills for setting up and executing bash scripts
+* You have access or able to install required packages (singularity/apptainer and conda are your friends here)
+* you access to HPC that has a GPU partition (dorado runs on GPU)
 * I would recommand generating ~50X coverage of raw sequencing data.
 
 **This workflow contains the following steps**
-1. Basecalling ([dorado](https://github.com/nanoporetech/dorado))
-2. Quality trimming (porechop, clean, FCX)
-3. Read filtering (chopper)
-4. Quality control (Nanoplot)
-5. Genome assembly (Hifiasm, Flye)
-6. Mitochondiral genome assembly
-7. Error correction [Medaka](https://timkahlke.github.io/LongRead_tutorials/ECR_ME.html)
-8. Genome assesment ([BUSCO](https://github.com/WenchaoLin/BUSCO-Mod))
-9. Repeat masking
-10. annotation
-11. Functional annotation
+1. Basecalling ([dorado basecaller](https://github.com/nanoporetech/dorado)) 
+2. Merge ubam files ([samtools](https://github.com/samtools))
+3. Trimming and filtering of simplex reads (porechop, clean, FCX, chopper)
+4. Quality control simplex reads (Nanoplot)
+5. Haplotype-aware error correction ([dorado correct](https://github.com/nanoporetech/dorado))
+6. Genome assembly (Hifiasm)
+7. Mitochondiral genome assembly
+8. Error correction [Medaka](https://timkahlke.github.io/LongRead_tutorials/ECR_ME.html)
+9.  Genome assesment ([BUSCO](https://github.com/WenchaoLin/BUSCO-Mod))
+10. Repeat masking
+11. Annotation (Eggnog-mapper[https://github.com/eggnogdb/eggnog-mapper])
+12. Functional annotation
 
-## What you do you need
-* raw read data from the oxford nanopore
-* settings under which the data was genrated
-* rough estimate of genomes size 
-* a High Performance Computing cluster with the ability to run programs using both CPU and GPU
+## 1. basecalling with [dorado basecaller](https://github.com/nanoporetech/dorado)
+### i. Convert fast5 (optional)
+If your raw data is stored in fast5 files you will have to convert them to pod5. To do so, you can use [pod5](https://pod5-file-format.readthedocs.io/en/latest/).
 
-## 1. basecalling
-You can perform basecalling using **dorado**
-
-### basecaling with [dorado](https://github.com/nanoporetech/dorado)
-#### convert with [pod5](https://pod5-file-format.readthedocs.io/en/latest/)
-We'll use dorado to convert the raw output from your sequencing run to fastq data. Often you receive both fast5 and fastq files. In such cases basecalling is performed while output was genereted. However, it's best to redo the basecalling using a hyper acurate model.
-
-First we need to convert the fast5 files for POD5 using pod5.
-To speed things up I've written code for an array. 
-
-The following piece of code retrives the name of ith fast5 file in your FAST5_DIR and creates a new file extension for the POD5 file. Then pod5 converts the ith FAST5 file in the array to POD5. This will create the same number of pod5 files as fast5 files.
 ```
-#!/bin/bash
-#SBATCH -a 1-10
-#SBATCH --cpus-per-task=2
-#SBATCH --mem-per-cpu=5G
-#SBATCH --partition=quicktest
-#SBATCH --time=0-1:00
-#SBATCH --job-name=pod5
-
-### IMPORTANT: manually change to number of arrays (-a) to the number of file in your fast5 directory ###
-i=${SLURM_ARRAY_TASK_ID}
+#PATHS
 FAST5_DIR=/PATH/TO/FAST5_DIR
 POD5_DIR=/PATH/TO/POD5_DIR
-NAME=$( ls $FAST5_DIR/*.fast5 | head -n $i | tail -n 1 | sed -e 's/\.fast5$//' | xargs -n 1 basename )
 
-pod5 convert fast5 $FAST5_DIR/$NAME.fast5 --output $POD5_DIR/$NAME.pod5
+#run pod5
+pod5 convert fast5 $FAST5_DIR/*.fast5 --output $POD5_DIR/ --one-to-one $FAST5_DIR/
 ```
-If you're not comfotable with arrays you can run the code like this (but it will take MUCH longer!)
-```
-pod5 convert fast5 $FAST5_DIR/*.fast5 --output $POD5_DIR/$output.pod5 --one-to-one $FAST5_DIR/
-```
-#### Basecalling with [dorado](https://github.com/nanoporetech/dorado)
-Dorado runs on GPU!
+If you already have your raw data in pod5 you can skip this step.
 
-It's imporant you know which 
+### ii. Dorado basecalling
+In order to perform basecalling using dorado you will need to know a number of things about how the data was generated.
 1. Library preperation protocol was used (e.g. kit14 SQK-LSK114)
 2. Flow cell was used (e.g. R10.4.1 FLO-PRO114M)
 3. Machine and speed the flow cell was run on (e.g. P2 400 bps)
 This information will let you pick the right model --> dna_r10.4.1_e8.2_400bps_sup@v4.1.0
-First download dorado
+
+You can downlaod the latest dorado version from [here](https://github.com/nanoporetech/dorado/releases). By aware, from v1.0.0 you can no longer run 4kHz models. If you used older chemistry, download an older version (v0.X.X).
+
+
 ```
-# download dorado
-cd ~/bin
-wget "https://cdn.oxfordnanoportal.com/software/analysis/dorado-0.3.1-linux-x64.tar.gz"
-# unpack 
-tar -xzf dorado-0.3.1-linux-x64.tar.gz
+POD5_DIR=PATH/TO/POD5_DIR
+BAM_DIR=PATH/TO/BAM_DIR
+
+dorado basecaller --trim all sup,5mCG_5hmCG $POD5_DIR > $BAM_DIR/simplex_5mCG_5hmCG.bam
 ```
+By default dorado trims all adapters and barcodes but I prefer to explicitely use the parameter `--trim all`. Dorado had various basecalling models that balance speed and acuracy. The sup (superior) model is the slowest but results in the highest quality. Oxford Nanopore also allows for scoring of basemodification like 5mCG and 5hmCG sites. I recommand scoring all possible base modification available for the chemistry you used. For more information on basecalling models and how to select them see [here](https://github.com/nanoporetech/dorado?tab=readme-ov-file#available-basecalling-models).
+
+If you have issues with running time (like me), you can split up job into multiple smaller ones. See 1_1_submit_array_dorado.sh and 1_dorado.sh in the scritps directory. You will have to merge all resulsting bam files into a single file using `bamtools merge`.
+
+### iii. Read filtering
+Now that we have our raw basecalling data we can filter low 
+
+
+
 Again, for the dorado basecalling I've written an array script that allows you to basecall all your pod5 files in parallel, drastically cutting back run time. In some cases you might not be able to request enough run time to basecall all your pod5 files in series. Dorado requests a directory is input and performs casecalling on all pod5 files contained in the that directory. The following array script copies a single pod5 file to a temporary directory and performs basecalling.  
 ```
 #!/bin/bash
