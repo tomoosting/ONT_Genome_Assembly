@@ -43,7 +43,7 @@ export NCBI_FCS_REPORT_ANALYTICS=1
 LOCAL_DB="$SCRATCH/databases/fcs"
 #create database - run these commands only ones to build database
 #SOURCE_DB_MANIFEST="https://ncbi-fcs-gx.s3.amazonaws.com/gxdb/latest/all.manifest"
-#python3 $py db get --mft "$SOURCE_DB_MANIFEST" --dir "$LOCAL_DB/gxdb"
+#python3 $PY db get --mft "$SOURCE_DB_MANIFEST" --dir "$LOCAL_DB/gxdb"
 #check if files are present 
 #ls $LOCAL_DB/gxdb
 

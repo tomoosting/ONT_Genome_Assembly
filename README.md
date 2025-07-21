@@ -59,329 +59,321 @@ dorado basecaller --trim all sup,5mCG_5hmCG $POD5_DIR > $BAM_DIR/simplex_5mCG_5h
 ```
 By default dorado trims all adapters and barcodes but I prefer to explicitely use the parameter `--trim all`. Dorado had various basecalling models that balance speed and acuracy. The sup (superior) model is the slowest but results in the highest quality. Oxford Nanopore also allows for scoring of basemodification like 5mCG and 5hmCG sites. I recommand scoring all possible base modification available for the chemistry you used. For more information on basecalling models and how to select them see [here](https://github.com/nanoporetech/dorado?tab=readme-ov-file#available-basecalling-models).
 
-If you have issues with running time (like me), you can split up job into multiple smaller ones. See 1_1_submit_array_dorado.sh and 1_dorado.sh in the scritps directory. You will have to merge all resulsting bam files into a single file using `bamtools merge`.
-
-### iii. Read filtering
-Now that we have our raw basecalling data we can filter low 
-
-
-
-Again, for the dorado basecalling I've written an array script that allows you to basecall all your pod5 files in parallel, drastically cutting back run time. In some cases you might not be able to request enough run time to basecall all your pod5 files in series. Dorado requests a directory is input and performs casecalling on all pod5 files contained in the that directory. The following array script copies a single pod5 file to a temporary directory and performs basecalling.  
+If basecalling gets interrupted, you can resume basecalling by providing the `--resume-from` flag.
 ```
-#!/bin/bash
-#SBATCH -a 1-10
-#SBATCH --partition=gpu
-#SBATCH --gres=gpu:1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=2
-#SBATCH --mem=39G
-#SBATCH --time=0-0:30:00
-#SBATCH --job-name=dorado
+dorado basecaller --trim all sup,5mCG_5hmCG $POD5_DIR --resume-from $BAM_DIR/simplex_5mCG_5hmCG.bam > $BAM_DIR/simplex_5mCG_5hmCG_resumed.bam
+mv $BAM_DIR/simplex_5mCG_5hmCG_resumed.bam $BAM_DIR/simplex_5mCG_5hmCG.bam
+```
 
-# Code to set up GPU partition **!!!THIS WILL BE SPECIFIC TO YOUR HPC!!!**
-module load GCC/10.2.0
-module load CUDA/11.1.1
-module load OpenMPI/4.0.5
+### iii. convert to fastq
+The resulting bam file needs to be converted to fastq using [samtools and bgzip from htslib](https://www.htslib.org/download/). Do not remove the bam file! This file stores the base modification scores which will be used later.
 
-# Program
-dorado=~/bin/dorado-0.3.1-linux-x64/bin/dorado
+To assess the quality of the raw reads you can use [Nanoplot](https://github.com/wdecoster/NanoPlot) to visualise the read quality and read lentghs.  
+```
+# Convert bam to fastq - note that the base modifications are not written to the fastq file.
+samtools fastq simplex_5mCG_5hmCG.bam > simplex.fastq
 
+# Bgzip fastq file
+bgzip simplex.fastq
+
+# Run QC using Nanoplot
+NanoPlot -t 10 --fastq bgzip simplex.fastq.gz -o PATH/TO/NAOPLOT/OUTPUT/DIRECTORY   
+```
+
+## 2. Read filtering
+To remove low-quality reads and filter sequencing artifacts we'll use [chopper](https://github.com/wdecoster/chopper) and [clean](https://github.com/rki-mf1/clean). Again, we can run Nanoplot to compare how filtering changed effected our read quality and length distribution.
+
+Remove reads that have a quality score below a phred-score below 8 `-q 8` and shorter than 100 basepairs `-l 100`. While dorado should remove all adapters and primers, I find it a good practice to remove the first 50 and last 20 basepairs to remove any unwanted sequences missed by dorado `--headcrop 50 --tailcrop 20`. Chopper loads the entire fastq file into memory, so make sure you request enough RAM for this job (below I've requested 20 threads and 200Gb of memory).
+
+
+To run the de
+
+```
+# Run chopper
+bgzip -cd simplex.fastq.gz | chopper -q 8  -t 20 -l 100 --headcrop 50 --tailcrop 20 | bgzip -c > simplex_porechop_q8_hc50_tc20_l100.fastq.gz
+
+# Run clean
+nextflow run rki-mf1/clean -r v1.1.2                  \
+ --input_type nano                                    \
+ --input simplex_porechop_q8_hc50_tc20_l100.fastq.gz' \
+ --control dcs                                        \
+ --output $CLEAN_DIR                                  \
+ --cores 20                                           \
+ --memory '200.GB'                                    \
+ -profile conda
+
+# Move clean reads and rename file
+mv $CLEAN_DIR/clean/*.fastq.gz simplex_filtered.fastq.gz
+
+# Run Nanoplot
+NanoPlot -t 10 --fastq bgzip simplex_filtered.fastq.gz -o PATH/TO/NANOPLOT/OUTPUT/DIRECTORY
+```
+
+The final output contains high-quality reads that can be used for assembling a genome. Depending on the assembler, additional filter steps might be required. 
+
+## 3. Haplotype aware error correction (dorado correct)
+Dorado provides an error-correction module which is an integration of the [HERRO](https://github.com/lbcb-sci/herro) algorithm. This involves an all-vs-all alignment and subsequent haplotype-aware error correction, producing high accuracy "Hifi-like" reads (similar to those produced by Pac-Bio). We'll follow the protocol presented in the [HERRO paper](https://www.biorxiv.org/content/10.1101/2024.05.18.594796v2) for performing the additional filtering steps required to perform the error correction. 
+
+We'll remove reads shorter than 10kbp (`-l 10000`) and a quality-score below 10 (`-q 10`). We'll also use this opportunity to filter Ultra-Long (UL) reads (> 50 kbp) which will be used for scaffolding during the assembly.
+```
+# Run chopper for error-correction input
+bgzip -cd simplex_filtered.fastq.gz' | chopper -t 10 -l 10000 -q 10 | bgzip -c > simplex_filtered_10kbp_q10.fastq.gz
+
+# Run chopper to extract ULreads
+bgzip -cd simplex_filtered_10kbp_q10.fastq.gz | chopper -t 10 -l 50000 | bgzip -c > simplex_filtered_50kbp_q10.fastq.gz
+
+#run Nanoplot for ULreads. you will need to infer error rate (required parameter for Hifiasm)
+NanoPlot -t 10 --fastq bgzip simplex_filtered_50kbp_q10.fastq.gz -o PATH/TO/NANOPLOT/OUTPUT/DIRECTORY
+```
+Then use the resulting file to run dorado correct.
+```
 # Download model
-$dorado download --model dna_r10.4.1_e8.2_400bps_sup@v4.1.0
+dorado download --model herro-v1
 
-# Variables
-i=${SLURM_ARRAY_TASK_ID}
-
-# Paths
-POD5_DIR=PATH/TO/POD5/DIR
-BAM_DIR=PATH/TO/BAM/OUTPUT/DIR
-mkdir -p $BAM_DIR
-
-# Extract filename from the ith pod5 file in directory
-NAME=$( ls $POD5_DIR/*.pod5 | head -n $i | tail -n 1 | sed -e 's/\.pod5$//' | xargs -n 1 basename )
-
-# Create tmp dir and copy pod5 file
-TMP_DIR=$BAM_DIR/$NAME/
-mkdir -p $TMP_DIR
-cp $POD5_DIR/$NAME.pod5 $TMP_DIR
-
-# Run dorado
-$dorado basecaller dna_r10.4.1_e8.2_400bps_sup@v4.1.0 $TMP_DIR > $BAM_DIR/$NAME.bam 
-
-# Remove tmp dir
-rm -r $TMP_DIR
+# Perform correction
+dorado correct -t 200 -m herro-v1 simplex_filtered_10kbp_q10.fastq.gz > hifi_reads.fasta
 ```
-#### merge bam files and convert bam to fastq
-The next step is merging all bam files and convert with samtools, then compress using bgzip.
-```
-samtools merge $BAM_OUT.bam $BAM_OUT/*.bam
-samtools fastq $BAM_OUT.bam > $FASTQ_OUT.fastq
-bgzip $FASTQ_OUT.fastq
-```
-#### create summary file
+Note that the output is written in FASTA (not FASTQ). This implies that there are no quality scores associated and basecalls als assumed to be accurate.
+
+The resulting reads are split into 30kbp fragments to mimic Pac-Bio reads. The assembler Hifiasm was build specifically to handle Pac-Bio data which are approximately 30kbp max in length. Submitting longer reads were observed to reduce the quality of the assembly, hence we'll be doing the same here using [seqkit](https://github.com/shenwei356/seqkit). Any split sequences shorter than 10kbp were subsequently removed.
 
 ```
-dorado summary $BAM_EXT.bam > $BAM_EXT.sequencing_summary.txt
-```
+# Split reads in 30kbp sections
+seqkit sliding -j 10 -g -s 30000 -W 30000 hifi_reads.fasta | seqkit seq -m 10000 -w 0 > hifi_reads_split.fasta
 
-#### remove adapters with [porechop](https://github.com/rrwick/Porechop)
-Like other sequencing platforms, ONT reads can have adapter sequences attached. These we'll rempove with porechop. This program is no longers upported but it still seems to be the go to program.
-I've had some issues with installing the program due to compatibility issues on my HPC, but I've found a singulatiry container [here](https://forgemia.inra.fr/gafl/singularity/porechop). If you don't have experience working with singulatiry have a look at their [page](https://docs.sylabs.io/guides/3.1/user-guide/index.html). First download the image.
+# Ran Nanoplot
+NanoPlot -t 10 --fasta $FASTA'_herro_hifi_split.fasta' -o $NANO/herro_hifi_split
 ```
-singularity pull porechop_v0.2.3.sif oras://registry.forgemia.inra.fr/gafl/singularity/porechop/porechop:latest
-```
-Then we can run the program as follows:
-```
-singularity exec porechop_v0.2.3.sif porechop
-```
+You will notice there are strange peaks in the read length distribution. This is an artifact from the binning process of the error-correction algorithm and can be safely ignored ([see](https://github.com/lbcb-sci/herro/issues/67)).
 
-## 2. Quality control
+## 4. Genome assembly ([Hifiasm](https://github.com/chhylp123/hifiasm))
+We now have all the required input files to perform an assembly using Hifiasm. We'll employ two different strategies to generating a de novo assembly. 
 
-PycQC python3 application which generates summaries based on output from `dorado summary calls.bam` and the `sequencing_summary.txt` file generated by guppy.
-The easiest wat to run PycoQC is in a virtual environment. See this [link](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/) on how to install and use virtual python environments.
-in short how to install a vitrual environment (don't do this on the login node of your HPC, admins and other users won't like this)
-```
-# Install package
-python3 -m pip install --user virtualenv 
-# Create vitrual environment names pycoqc_env
-python3 -m venv ~/python/pycoqc_env
-# Activate environment
-source ~/python/pycoqc_env/bin/activate
-# You are not inside your virtunal environment where you can install pycoQC
-pip install pycoQC
-# Exit virtual environment
-deactivate 
-```
-Now that pycoQC is installed we can run it using the following code
-```
-source ~/python/pycoqc_env/bin/activate
-pycoQC -f sequncing_summary.txt \
-       -o output.html           \
-       -j output.json           \
-       --min_pass_qual 7
-```
-## 4. Genome assembly
-If your FASTQ data looks good we can start creating a draft assembly using [flye](https://github.com/fenderglass/Flye). 
-First, let's install Flye on your system:
-```
-# Navigate to where you would want your installation, for example
-cd ~/bin/
-# Download Flye, go into the directory and compile 
-git clone https://github.com/fenderglass/Flye
-cd Flye
-make
-```
-We can now run Flye by typing `~/bin/Flye/bin/Flye`.
+1. Hybrid approach using split hifi reads + UL simplex reads
+2. simplex only approach using filtered reads from dorado
 
-If you have done multiple runs on the ONT to generate the data, copy all FASTQ.gz files you want to use for your assembly to a single directory (i.e. FLYE_DATA_DIR)
-```
-# Point towards your Flye installation
-flye=~/bin/Flye/bin/flye
-# Run Flye on your data
-$flye --nano-hq FLYE_DATA_DIR/*.fastq.gz \
-      --out-dir FLYE_OUTPUT              \
-      --genome-size 0.7g                 \
-      --threads 10                       \
-      --read-error 0.03                  \
-      --no-alt-contigs                   \
-      --scaffold
-```
-Note that the output directory must not exist, flye will create or give an error if the directory is already present. You also need to provide a rough estimate of your genome size `--genome-size`, here I expect the genome to be around 700Mb or `0.7g`. For Q20 ONT data the [Flye manual](https://github.com/fenderglass/Flye/blob/flye/docs/USAGE.md) suggests using a `--read-error` of 0.03. I prefer to run Flye with `--no-alt-contigs` and `--scaffold` as this removes alternative alleles (haplotigs) and produces the most contiguous assmebly.
+Which approach works best for you will depend on the quality of your data and the complexity of the genome. It's worth performing an assembly using both methods and evaluating which approach resulted in the best assembly based on the number scaffolds and completeness (see Assembly statistics section).
 
-## 5. genome assesment 
-To assess how completenes and contiguous the assembly is we can use [BUSCO](https://busco.ezlab.org/busco_userguide.html) and [assembly-stats](https://github.com/rjchallis/assembly-stats).
+### i. Hifiasm - hifi + ULreads
+This approach uses the error-corrected hifi reads and ULreads as input. To obtain the error rate of the ULreads you can use average phredscore provided by Nanoplot and convert this to error probability ([online tool](https://jamiemcgowan.ie/bioinf/phred.html)). An error rate of 0.02 is roughly equal to a phredscore of 17.
 
-### BUSCO
-BUSCO tries to find a set of genes to determine completeness of the genome.
-We will use Singularity to to run BUSCO.
-First download the Singularity image (.sif)
-```
-**!!!THIS WILL BE SPECIFIC TO YOUR CLUSTER!!!**
-module load GCC/10.2.0
-module load OpenMPI/4.0.5
-module load Singularity/3.7.3
+The output directory will contain multiple assembly files. We'll focus on asm.bp.p_ctg.gfa (i.e. assembly of primary contigs). For a detailed explanation of the different output files see [here](https://hifiasm.readthedocs.io/en/latest/interpreting-output.html).
 
-singularity pull docker://ezlabgva/busco:v5.2.2_cv1
+The graph based output (gfa file) is converted to fasta, indexed using [samtools](https://www.htslib.org/download/), and scaffolds are reordered and renamed based on their length using [seqkit](https://github.com/shenwei356/seqkit).
 ```
+# Output directory
+HIFI_DIR=/PATH/HIFIASM/OUTPUT
+
+# Run Hifiasm
+hifiasm -o $HIFI_DIR/assembly.asm -t 32 --ul simplex_filtered_50kbp_q10.fastq.gz --ul-rate 0.02 hifi_reads_split.fasta
+
+#convert gfa to fasta
+cd $HIFI_DIR
+awk '/^S/{print ">"$2;print $3}' assembly.asm.bp.p_ctg.gfa > assembly.asm.bp.p_ctg.fa
+
+#reorder and rename contigs
+seqkit sort --by-length --reverse assembly.asm.bp.p_ctg.fa | seqkit replace --pattern '.+' --replacement 'Contig{nr}' > assembly.asm.bp.p_ctg.reordered.fasta
+
+# Index fasta file
+samtools faidx assembly.asm.bp.p_ctg.reordered.fasta
+
+# Remove intermediate file
+rm $HIFI_DIR/$ASSEMBLY.asm.bp.p_ctg.fa
+```
+### ii. Hifiasm - ONT-simplex 
+From version v0.21.0 onwards, hifiasm incorporated a new function which allows you to submit ONT simplex reads as the primary input for the assembly.
+```
+HIFI_DIR=/PATH/HIFIASM/OUTPUT
+
+hifiasm --ont -o $HIFI_DIR/assembly.asm -t32 simplex_filtered.fastq.gz
+
+#convert gfa to fasta
+cd $HIFI_DIR
+awk '/^S/{print ">"$2;print $3}' assembly.asm.bp.p_ctg.gfa > assembly.asm.bp.p_ctg.fa
+
+#reorder and rename contigs
+seqkit sort --by-length --reverse assembly.asm.bp.p_ctg.fa | seqkit replace --pattern '.+' --replacement 'Contig{nr}' > assembly.asm.bp.p_ctg.reordered.fasta
+
+# Index fasta file
+samtools faidx assembly.asm.bp.p_ctg.reordered.fasta
+
+# Remove intermediate file
+rm $HIFI_DIR/$ASSEMBLY.asm.bp.p_ctg.fa
+```
+Again, you will need to evaluate yourself which approach resulted in the best assembly for your species. If you want to see how your assembly looks right after your assembly (which I would recommend), you can run gfastats, quast and BUSCO to assess the quality (7. assembly evaluation) 
+
+## 5. Purge haplotigs ([purge_dups](https://github.com/dfguan/purge_dups))
 
 ```
-**!!!THIS WILL BE SPECIFIC TO YOUR CLUSTER!!!**
-module load GCC/10.2.0
-module load OpenMPI/4.0.5
-module load Singularity/3.7.3
-
-singularity run busco:v5.2.2_cv1.sif busco -i $ASSEMBLY_DIR/assembly.fasta  \ 
-                                           -o busco_assembly                \
-                                           -l actinopterygii_odb10          \
-                                           -m genome                        \
-                                           --cpu 10
+add code
 ```
 
+## 6. Contamination screening ([FCS](https://github.com/ncbi/fcs))
 
-### Assembly-stats
-Assembly-stats procuces a circle plot. To run this using the provides script you'll have to download the circle_plot folder in this repository and place it in the same directory as the script.
+It's possible that DNA from other organisms (e.g. E.coli) or adapter sequences were not filtered out previous steps and represented in your assembly. You can use Foreign Contaminations Screen (FCS) to test for this, and sequently remove these sequences if present. FCS consists of of separate module which test for each type of contamination separately.
+
+### i. [FCS-adapter](https://github.com/ncbi/fcs/wiki/FCS-adaptor-quickstart)
+
 ```
-#!/bin/bash
-#SBATCH --cpus-per-task=2
-#SBATCH --mem-per-cpu=5G
-#SBATCH --partition=quicktest
-#SBATCH --time=0-1:00
-#SBATCH --job-name=circle_plot
+# Containers and scripts
+FCS_ADAPTOR_SIF=/PATH/TO/FCS-ADAPTER/SINGULARITY/SIF
+FCS_GX_SIF=/PATH/TO/FCS-GX/SINGULARITY/SIF
+PY=/PATH/FCS/PYTHON/SCRIPT
 
-PROJECT=$1 #species name
+# PATHS
+FASTA=/PATH/TO/PURGED/ASSEMBLY
+FCS_DIR=/PATH/TO/FCS/OUTPUT/DIR
 
-#directory where your flye assembly.fasta is
-ASSEMBLY_DIR=/PATH/TO/FLYE/ASSEMBLY  
+# Create output directory
+mkdir -p $FCS_DIR/fcs_adaptor
 
-#output directory where output is written to
-OUT_DIR=/PATH/TO/BUSCO/DIR
-mkdir -p $OUT_DIR
+# Run fcs_adaptor
+./run_fcsadaptor.sh --fasta-input $FASTA                \
+                    --output-dir $FCS_DIR/fcs_adaptor   \
+                    --euk                               \
+                    --container-engine singularity      \
+                    --image $FCS_ADAPTOR_SIF
 
-#perl script
-asm2stats=./circle_plot/pl/asm2stats.pl
-
-#copy template folder to OUT_DIR
-cp -r ./circle_plot/* $OUT_DIR
-
-#create json file
-echo "var ${PROJECT} = " > $OUT_DIR/json/$PROJECT'.json'
-perl $asm2stats $ASSEMBLY_DIR/assembly.fasta >> $OUT_DIR/json/$PROJECT'.json'
-echo "localStorage.setItem('${PROJECT}',JSON.stringify(${PROJECT}))" >> $OUT_DIR/json/$PROJECT'.json'
-
-#add json to html
-sed -i s"%<!--add_jsons_here-->%  <!--add_jsons_here-->\n  <script type=\"text/javascript\" src=\"json/${PROJECT}.json\"></script>%"g $OUT_DIR/assembly-stats.html
-```
-Afterwards, copy the entire circle_plot folder this is in `OUT_DIR` to your PC and open up the assemble-stats.html file to view the results.
-
-## 9. Repeat Masking
-In order to annotate the genome we first need to mask repeat regions in the genome. To do this we'll use singularity image from [dfam](https://github.com/Dfam-consortium/TETools). Repeats will be masked based on transposabe elements (TE) identified in the assembly and known repeat sequences present in Dfam and RepBase libraries. While the singularity container comes with a Dfam library, there is a much more extentive one (PLEASE NOTE: the extensive dfam library is 700Gb to make sure you have enough space on your system.). There is also an old (but free) RepBase library you can download. We will first download these two liraries and then download and configure the singularity image.  
-```
-#create a directory to download the dfam and RepBase liraries
-mkdir /path/to/Repeat_masker_libs
-cd /path/to/Repeat_masker_libs
-
-#download Dfam and check if download is corrupted
-wget "https://www.dfam.org/releases/Dfam_3.7/families/Dfam.h5.gz"
-wget "https://www.dfam.org/releases/Dfam_3.7/families/Dfam.h5.gz.md5"
-md5sum check Dfam.h5.gz.md5
-gzip -d Dfam.h5.gz > Dfam.h5
-
-#download RepBase
-#if wget doesn't work you can download the file manually from github and transfer to your system (this file is not big)
-wget https://github.com/yjx1217/RMRB/blob/master/RepBaseRepeatMaskerEdition-20181026.tar.gz
-tar -xzf RepBaseRepeatMaskerEdition-20181026.tar.gz
-mv ./Libraries/* .
-rm -r ./Libraries
-```
-This should produce 3 files: `Dfam.h5`, `RMRBSeqs.embl` and `README.RMRBSeqs`. 
-Next we will download the singulatity imamge `dfam-tetools-latest.sif` and update the libraries.
-```
-#download and create singularity image
-singularity pull dfam-tetools-latest.sif docker://dfam/tetools:latest
-
-#enter the container in interactive mode and copy the lirary to outside the container
-singularity shell /path/to/dfam_container/dfam-tetools-latest.sif
-cp -r /opt/RepeatMasker/Libraries/ /path/to/Repeat_masker_libs
-exit
-
-#remove the old Dfam lib and move the new libraries to Liraries fodler
-rm ./Libraries/Dfam.h5
-mv * ./Libraries/
-
-#update the singularity image
-singularity exec dfam-tetools-latest.sif addRepBase.pl -libdir Libraries
-```
-Now that we have created the RepeatMasker singularity image, downloaded the Dfam and RepBase libraries, and updated the singularity image.
-
-Now we have prepaired our singularity image so we can run both [RepeatModeler](https://www.repeatmasker.org/RepeatModeler/) and [RepeatMasker](https://www.repeatmasker.org/). This section includes the follwoing steps:
-1. build a database from your assembly
-2. Identify TEs
-3. extract known repeat sequences 
-4. merge output from steps 2 & 3 
-5. mask repeats
-6. convert to hardmasked
-```
-#export PATH to libraries created in previous section
-export LIBDIR=/path/to/Repeat_masker_libs/Libraries
-
-#create output directory for outout
-PURGE_DIR=/path/to/purge_haplpotypes/
-REPEAT_DIR=/path/to/repeat/output/
-mkdir $REPEAT_DIR
-
-#1. build database
-mkdir $REPEAT_DIR/libraries
-singularity run dfam-tetools-latest.sif BuildDatabase -name $REPEAT_DIR/libraries/repeat_modeler_db \
-                                                      -engine ncbi                                  \
-                                                      $PURGE_DIR/assembly.fasta
-
-#2. Identify TEs
-singularity run dfam-tetools-latest.sif RepeatModeler -threads 32                                 \
-                                                      -LTRStruct                                  \
-                                                      -database $REPEAT_DIR/libraries/$ASSEMBLY'_db'
-
-#3. check if taxonomic group is available 
-singularity exec dfam-tetools-latest.sif famdb.py -i /nfs/scratch/oostinto/RepeatMasker/Libraries/RepeatMaskerLib.h5 lineage -ad 'Actinopterygii'
-#extract repeats
-singularity exec dfam-tetools-latest.sif famdb.py -i /nfs/scratch/oostinto/RepeatMasker/Libraries/RepeatMaskerLib.h5 families -ad --add-reverse-complement Actinopterygii > $REPEAT_DIR/Actinopterygii_library.fa
-
-#4. merge dfam and repeatmodeler databases
-cat $REPEAT_DIR/libraries/repeat_modeler_db-families.fa $REPEAT_DIR/libraries/Actinopterygii_library.fa > $REPEAT_DIR/libraries/combined_library.fa
-
-#5. run repeatmasker
-singularity exec dfam-tetools-latest.sif RepeatMasker -pa 32                   \
-                                                      -dir $REPEAT_DIR         \
-                                                      -xsmall                  \
-                                                      -lib $REPEAT_DIR/libraries/combined_library.fa $PURGE_DIR/assembly.fasta
-mv $REPEAT_DIR/results/assembly.fasta.masked $REPEAT_DIR/assembly.softmasked.fasta
-
-#6. convert softmasked to hardmasked
-sed 's/(acgt)/N/g' $REPEAT_DIRassembly.softmasked.ordered.fasta > $REPEAT_DIR/results/assembly.hardmasked.ordered.fasta
+# clean genome
+export FCS_DEFAULT_IMAGE=$FCS_GX_SIF
+export NCBI_FCS_REPORT_ANALYTICS=1
+cat $FASTA | python3 $PY clean genome                                               \
+        --action-report $FCS_DIR/fcs_adaptor/fcs_adaptor_report.txt                 \
+        --output $FCS_DIR/fcs_adaptor/assembly.fcs_adaptor.clean.fasta             \
+        --contam-fasta-out $FCS_DIR/fcs_adaptor/assembly.fcs_adaptor.contam.fasta        
 ```
 
-## 10. Genome annotation
+### ii. [FCS-GX](https://github.com/ncbi/fcs/wiki/FCS-GX-quickstart)
 
-To annotate the genome we well use [braker3](https://github.com/Gaius-Augustus/BRAKER), a fully automated pipeline that can uitlise RNA-seq + genome assembly and genome assembly only. Because we don't have RNA-seq data we will use the genome assembly only pipeline. Have a look at the braker github to get a detailed description of the steps.
-
-First, we'll download the nessesary files. And again, we'll use a singularity container.
+Running FCS-GX requires pre-building a large database which needs to be loaded into memory. 
+first, Build the database. make sure you have enough free space (200Gb)
 ```
-#build container
-singularity build braker3.sif docker://teambraker/braker3:latest
+# FCS_gx database
+LOCAL_DB="PATH/TO/GCS_GX/DATABASE"
+PY=/PATH/FCS/PYTHON/SCRIPT
 
-#Download [ortho-db](https://bioinf.uni-greifswald.de/bioinf/partitioned_odb11/) tuitable for your species. Here I download a protein database for vertebrates. 
-wget "https://bioinf.uni-greifswald.de/bioinf/partitioned_odb11/Vertebrata.fa.gz"
-gunzip Vertebrata.fa.gz > Vertebrata.fa
+# Build database
+SOURCE_DB_MANIFEST="https://ncbi-fcs-gx.s3.amazonaws.com/gxdb/latest/all.manifest"
+python3 $PY db get --mft "$SOURCE_DB_MANIFEST" --dir "$LOCAL_DB/gxdb"
+
+# Check if files are present 
+#ls $LOCAL_DB/gxdb
 ```
-You will also need to obtain the config folder from Augustus and place it at a writable location. You can find the config fodler on the github page from [Augustus](https://github.com/Gaius-Augustus/Augustus). Download the config folder and put it on a an accessable location.
 
-Braker runs on the soft-masked version of your assembly using the following code
+Now you can run FCS-gx to perform contamination screening.
+
 ```
-#Augustus config
-AUG_CONFIG=/nfs/scratch/oostinto/scripts/genome_assembly/7_Annotation/config
-#ortho_db
-ORTHO_DB=/nfs/scratch/oostinto/databases/ortho_db11/Vertebrata.fa
-SOFTMASKED_FASTA=$READ_DIR/$ASSEMBLER/4_repeat_masking/...
-BRAKER_DIR=$READ_DIR/$ASSEMBLER/6_annotation/
+# Containers and scripts
+FCS_GX_SIF=/PATH/TO/FCS-GX/SINGULARITY/SIF
+PY=/PATH/FCS/PYTHON/SCRIPT
 
-#create output directory
-mkdir -p $BRAKER_DIR
+# PATHS
+LOCAL_DB="PATH/TO/GCS_GX/DATABASE"
+FASTA=/PATH/TO/FCS_ADAPTER/OUTPUT/FASTA
+FCS_DIR=/PATH/TO/FCS/OUTPUT/DIR
 
-#run braker3
-singularity exec -B braker3.sif braker.pl --AUGUSTUS_CONFIG_PATH=$AUG_CONFIG   \
-                                          --species=species_name               \
-                                          --genome=$SOFTMASKED_FASTA           \
-                                          --prot_seq=$ORTHO_DB                 \
-                                          --workingdir=$BRAKER_DIR             \
-                                          --threads=32                         \                                 --busco_lineage=actinopterygii_odb10 \
-                                          --gff3
+# Create output directory
+mkdir -p $FCS_DIR/fcs_gx
+
+# Export relevant settings
+export FCS_DEFAULT_IMAGE=$FCS_GX_SIF
+export NCBI_FCS_REPORT_ANALYTICS=1
+
+#taxomomic ID (search for on [ncbi](https://www.ncbi.nlm.nih.gov/taxonomy))
+tax_id=334912 #example for Polyprion oxygeneios, hapuka 
+
+#screen genome
+python3 $PY screen genome --fasta $FASTA --out-dir $FCS_DIR/fcs_gx --gx-db $LOCAL_DB/gxdb --tax-id $tax_id 
+
+#clean fasta
+cat $READ_DIR/$FASTA | python3 $PY clean genome                          \
+        --action-report $FCS_DIR/fcs_gx/*fcs_gx_report.txt               \
+        --output $FCS_DIR/fcs_gx/assembly.fcs_gx.clean.fasta             \
+        --contam-fasta-out $FCS_DIR/fcs_gx/assembly.fcs_gx.contam.fasta      
+
+# Copy clean assembly to main FCS dir
+cp $FCS_DIR/fcs_gx/assembly.fcs_gx.clean.fasta $FCS_DIR/assembly_final_assembly.fa
+
+# Reorder and rename assembly contigs
+seqkit sort --by-length --reverse $FCS_DIR/assembly_final_assembly.fa | seqkit replace --pattern '.+' --replacement 'Contig{nr}' > $FCS_DIR/assembly_final_assembly.fasta
+
+# Index assembly
+samtools faidx $FCS_DIR/assembly_final_assembly.fasta
+
+# Remove intermediate file
+rm $FCS_DIR/assembly_final_assembly.fa
 ```
-note that I use the same lineage for BUSCO as earlier
 
-Finally, to identify genes I would recommand using [blast2go](https://www.blast2go.com/). 
-You can run this on either your desktop or cluster. I personally run this locally on my laptop.
-I use the swissprot database which is a curated database.
-You will also need the output from braker i.e. braker.codingseq which is used is the input.
-Be aware, it may run a few days on your laptop.
+## 7. Assembly evaluation
+
+There are many tools out there that will allow you to evaluate the quality of your assembly. Below I outline a number of commonly used tools that are quick and easy to run. 
+
+### i. Assembly metrics ([gfastats](https://github.com/vgl-hub/gfastats) & [quast](https://github.com/ablab/quast))
+
+Gfastats and quast are great tools to extract the most important summary metrics about your assembly. The number of scaffolds, average scaffold length, N50-scaffold size ...
+They report very similar summary metrics, see which one you find most useful. gfastats `--seq-report` provides metrics for each individuals scaffold. 
+
+```
+ASSEMBLY=/PATH/TO/PURGED/ASSEMBLY
+STAT_DIR=/PATH/TO/STATS/DIRECTORY
+
+mkdir -p $STAT_DIR
+
+# Gfastats
+gfastats -f $ASSEMBLY              > $STAT_DIR/$assembly.summary.tsv
+gfastats -f $ASSEMBLY --seq-report > $STAT_DIR/$assembly.seq_summary.tsv
+
+# Quast
+quast  --output-dir $STAT_DIR/quast --threads 2 $ASSEMBLY
+```
+
+### ii. Assembly completeness [BUSCO](https://busco.ezlab.org/busco_userguide.html)
+
+BUSCO is an incredibly useful tool that evaluates the completeness of your assembly by trying to identify genes present in a reference database. Which database you need to use depends on your organism. Here, I've used the `actinopterygii_odb10` database for fish.
+
+```
+# PATHS
+ASSEMBLY=/PATH/TO/PURGED/ASSEMBLY
+STAT_DIR=/PATH/TO/STATS/DIRECTORY
+SIF=/PATH/TO/SINGULARITY/SIF
+
+# Create output directory
+mkdir $STAT_DIR/busco
+
+# Run BUSCO
+singularity run $SIF busco -i $ASSEMBLY               \
+                           --out_path $STAT_DIR/busco \
+       			   -o busco_assembly          \
+			         -l actinopterygii_odb10	\
+				   -m genome			\
+				   --cpu 10
+```
+
+### iii. Telomere identification ([tidk](https://github.com/tolkit/telomeric-identifier) & [quarTeT](https://github.com/aaranyue/quarTeT))
+Because we've used Oxford Nanopore Technology and assume we've generated some ultra-long reads we will want to check if we have assembled entire chromosome. To do this we will try to identify the presence of a telomeric sequence at the ends of all contigs (possibly full chromosomes).
+
+```
+add code
+```
+
+## 8. Extract mitochondrial genome ([MitoHifi](https://github.com/marcelauliano/MitoHiFi))
+
+## 9. Repeat masking
+
+### i. RepeatModeler
+
+### ii. RepeatMasker
+
+## 10. Functional annotation
+
+### i. Galba
+
+### ii. ACAT
+
+### iii. EggNog-mapper
+
+### iv. Interproscan
+
 
 
 
