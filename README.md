@@ -305,11 +305,9 @@ rm $FCS_DIR/assembly_final_assembly.fa
 ```
 
 ## 7. Assembly evaluation
-
 There are many tools out there that will allow you to evaluate the quality of your assembly. Below I outline a number of commonly used tools that are quick and easy to run. 
 
 ### i. Assembly metrics ([gfastats](https://github.com/vgl-hub/gfastats) & [quast](https://github.com/ablab/quast))
-
 Gfastats and quast are great tools to extract the most important summary metrics about your assembly. The number of scaffolds, average scaffold length, N50-scaffold size ...
 They report very similar summary metrics, see which one you find most useful. gfastats `--seq-report` provides metrics for each individuals scaffold. 
 
@@ -324,11 +322,10 @@ gfastats -f $ASSEMBLY              > $STAT_DIR/$assembly.summary.tsv
 gfastats -f $ASSEMBLY --seq-report > $STAT_DIR/$assembly.seq_summary.tsv
 
 # Quast
-quast  --output-dir $STAT_DIR/quast --threads 2 $ASSEMBLY
+quast --output-dir $STAT_DIR/quast --threads 2 $ASSEMBLY
 ```
 
-### ii. Assembly completeness [BUSCO](https://busco.ezlab.org/busco_userguide.html)
-
+### ii. Assembly completeness ([BUSCO](https://busco.ezlab.org/busco_userguide.html))
 BUSCO is an incredibly useful tool that evaluates the completeness of your assembly by trying to identify genes present in a reference database. Which database you need to use depends on your organism. Here, I've used the `actinopterygii_odb10` database for fish.
 
 ```
@@ -343,10 +340,10 @@ mkdir $STAT_DIR/busco
 # Run BUSCO
 singularity run $SIF busco -i $ASSEMBLY               \
                            --out_path $STAT_DIR/busco \
-       			   -o busco_assembly          \
-			         -l actinopterygii_odb10	\
-				   -m genome			\
-				   --cpu 10
+       			           -o busco_assembly          \
+			               -l actinopterygii_odb10	  \
+				           -m genome         		  \
+				           --cpu 10
 ```
 
 ### iii. Telomere identification ([tidk](https://github.com/tolkit/telomeric-identifier) & [quarTeT](https://github.com/aaranyue/quarTeT))
@@ -395,7 +392,8 @@ cd $REPEAT_DIR
 # Extract repeats
 singularity exec --bind $TETOOLS_LIB$:/opt/RepeatMasker/Libraries          \
               $dfam famdb.py -i /opt/RepeatMasker/Libraries/famdb families \
-              -f fasta_name -ad --include-class-in-name                    \ --add-reverse-complement                                     \
+              -f fasta_name -ad --include-class-in-name                    \ 
+              --add-reverse-complement                                     \
               Actinopterygii > $LIB_DIR/Actinopterygii_library.fa
 
 ################################### build repeat library from draft genome #############################
@@ -416,9 +414,9 @@ cat $LIB_DIR/cleaned_consensi.fa $LIB_DIR/Actinopterygii_library.fa > $LIB_DIR/c
 ```
 Check whether both generated libraries (and thus the merged library as well) contain sequences. If one step fails and produces an empty file the rest will run without giving an error. 
 
+### ii. Masking repeats
 Make sure you request enough memory and time for RepeatMasker to run. It is not uncommon for RepeatMaske to run over 10 days. If needed, request if your runtime can be extended. You can check in the logs how far along your run is. This will give you idea of how far along your analysis is. 
 
-### ii. Masking repeats
 ```
 ASSEMBLY=/PATH/TO/PURGED/ASSEMBLY
 
