@@ -63,7 +63,7 @@ singularity exec --bind /nfs/scratch/oostinto/databases/repeatmasker/Libraries:/
 echo "extracting from dfam database"
 singularity exec --bind /nfs/scratch/oostinto/databases/repeatmasker/Libraries:/opt/RepeatMasker/Libraries  \
               $dfam famdb.py -i /opt/RepeatMasker/Libraries/famdb families                                  \
-              -f fasta_name -ad --include-class-in-name --add-reverse-complement                                                    \
+              -f fasta_name -ad --include-class-in-name --add-reverse-complement                            \
               Actinopterygii > $LIB_DIR/Actinopterygii_library.fa
 
 #merge dfam and repeatmodeler databases

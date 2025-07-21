@@ -358,21 +358,96 @@ add code
 
 ## 8. Extract mitochondrial genome ([MitoHifi](https://github.com/marcelauliano/MitoHiFi))
 
-## 9. Repeat masking
+```
+add code
+```
 
-### i. RepeatModeler
+## 9. Repeat masking ([TETools](https://github.com/Dfam-consortium/TETools/))
+In onder to perform functional annotation we first need to identify and mask repetetaive regions within the genome. This is a very time consuming process and take the most time to complete by far. I would highly recommand using the [dfam TE Tools container](https://github.com/Dfam-consortium/TETools/). I will describe how to run this container using singularity. 
 
-### ii. RepeatMasker
+Repeat masking involved the following steps:
+1. Download + build container and dfam database
+2. Extract repeart sequences from database
+3. Identify repetative sequences within the genome
+4. Mask Repeats
 
-## 10. Functional annotation
+Carefully follow the instruntions on the dfam [TETools github page](https://github.com/Dfam-consortium/TETools/) on how to configure the TETools container by adding the nessecary dfam and RepBase libraries to the container. It's a somewhat complecated process which requires accessing the contents within the container and linking the downloaded libraries outside of the container. 
+
+The dfam library is very large and split into multiple partitions so you only have download those sections relevent for your organism. Check the FamDB [page](https://github.com/Dfam-consortium/FamDB) for an explenation.
+NOTE: below I extract repeats for `Actinopterygii`. You will have to replace this with the families that is appropriote for your species.
+
+### i. Identifying repeats
+```
+#PATHS
+ASSEMBLY=/PATH/TO/PURGED/ASSEMBLY
+TETOOLS_LIB=/PATH/TO/PREBUILD/LIB
+
+# Output
+REPEAT_DIR=/PATH/TO/REPEATMASKING/OUTPUT/DIR
+LIB_DIR=$REPEAT_DIR/libraries
+RM_DB=$REPEAT_DIR/repeatmodeler_db
+
+# Create and move to output directory
+mkdir -p $LIB_DIR $RM_DB
+cd $REPEAT_DIR
+
+################################### build repeat library from known repeats ############################
+# Extract repeats
+singularity exec --bind $TETOOLS_LIB$:/opt/RepeatMasker/Libraries          \
+              $dfam famdb.py -i /opt/RepeatMasker/Libraries/famdb families \
+              -f fasta_name -ad --include-class-in-name                    \ --add-reverse-complement                                     \
+              Actinopterygii > $LIB_DIR/Actinopterygii_library.fa
+
+################################### build repeat library from draft genome #############################
+#build de novo repeat library 
+singularity exec $dfam BuildDatabase -name $RM_DB/assembly_db $ASSEMBLY
+
+#Identify repeats including LTRS (long tandem repeats)
+singularity exec $dfam RepeatModeler -threads 32                    \
+                                     -LTRStruct                     \
+                                     -database $RM_DB/assembly_db
+mv RM*/ RepeatModelerOutput/
+
+#move output to new folder and removing empty lines
+awk 'NF' RepeatModelerOutput/consensi.fa > $LIB_DIR/cleaned_consensi.fa
+
+########################  merge the two libraries if known and identified repeats  ######################
+cat $LIB_DIR/cleaned_consensi.fa $LIB_DIR/Actinopterygii_library.fa > $LIB_DIR/combined_library.fa
+```
+Check whether both generated libraries (and thus the merged library as well) contain sequences. If one step fails and produces an empty file the rest will run without giving an error. 
+
+Make sure you request enough memory and time for RepeatMasker to run. It is not uncommon for RepeatMaske to run over 10 days. If needed, request if your runtime can be extended. You can check in the logs how far along your run is. This will give you idea of how far along your analysis is. 
+
+### ii. Masking repeats
+```
+ASSEMBLY=/PATH/TO/PURGED/ASSEMBLY
+
+# Output paths
+REPEAT_DIR=/PATH/TO/REPEATMASKING/OUTPUT/DIR
+LIB_DIR=$REPEAT_DIR/libraries
+
+# Run repeatmasker
+singularity exec $dfam RepeatMasker -pa 8                                   \
+                                    -dir $REPEAT_DIR                        \
+                                    -xsmall                                 \
+                                    -lib $LIB_DIR/combined_library.fa $ASSEMBLY
+```
+The output contains a .tbl file. This txt file contains a summary of all identified sequences and what percentage of your genome has been masked. 
+
+## 10. Gene Annotation
+Gene Annotation involves the identification if protein coding sequences in the (unmasked regions of the) genome. We will perform gene annotation within protein sequences (RNA-seq data). If RNA-seq is available for your species, it highly recommended you include this in your analysis.
 
 ### i. Galba
 
 ### ii. ACAT
+Because we only predicted 
 
-### iii. EggNog-mapper
 
-### iv. Interproscan
+## 11. Functional annotation
+
+### i. EggNog-mapper
+
+### ii. Interproscan
 
 
 
