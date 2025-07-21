@@ -378,6 +378,8 @@ NOTE: below I extract repeats for `Actinopterygii`. You will have to replace thi
 #PATHS
 ASSEMBLY=/PATH/TO/PURGED/ASSEMBLY
 TETOOLS_LIB=/PATH/TO/PREBUILD/LIB
+DFAM=PATH/TO/DFAM/TETOOLS/SIF
+
 
 # Output
 REPEAT_DIR=/PATH/TO/REPEATMASKING/OUTPUT/DIR
@@ -391,17 +393,17 @@ cd $REPEAT_DIR
 ################################### build repeat library from known repeats ############################
 # Extract repeats
 singularity exec --bind $TETOOLS_LIB$:/opt/RepeatMasker/Libraries          \
-              $dfam famdb.py -i /opt/RepeatMasker/Libraries/famdb families \
+              $DFAM famdb.py -i /opt/RepeatMasker/Libraries/famdb families \
               -f fasta_name -ad --include-class-in-name                    \ 
               --add-reverse-complement                                     \
               Actinopterygii > $LIB_DIR/Actinopterygii_library.fa
 
 ################################### build repeat library from draft genome #############################
 #build de novo repeat library 
-singularity exec $dfam BuildDatabase -name $RM_DB/assembly_db $ASSEMBLY
+singularity exec $DFAM BuildDatabase -name $RM_DB/assembly_db $ASSEMBLY
 
 #Identify repeats including LTRS (long tandem repeats)
-singularity exec $dfam RepeatModeler -threads 32                    \
+singularity exec $DFAM RepeatModeler -threads 32                    \
                                      -LTRStruct                     \
                                      -database $RM_DB/assembly_db
 mv RM*/ RepeatModelerOutput/
@@ -423,9 +425,10 @@ ASSEMBLY=/PATH/TO/PURGED/ASSEMBLY
 # Output paths
 REPEAT_DIR=/PATH/TO/REPEATMASKING/OUTPUT/DIR
 LIB_DIR=$REPEAT_DIR/libraries
+DFAM=PATH/TO/DFAM/TETOOLS/SIF
 
 # Run repeatmasker
-singularity exec $dfam RepeatMasker -pa 8                                   \
+singularity exec $DFAM RepeatMasker -pa 8                                   \
                                     -dir $REPEAT_DIR                        \
                                     -xsmall                                 \
                                     -lib $LIB_DIR/combined_library.fa $ASSEMBLY
